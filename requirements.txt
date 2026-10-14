@@ -12,6 +12,7 @@ pyyaml>=6.0
 tqdm>=4.66
 rich>=13.7
 pytest>=8.2
+reportlab>=4.0   # tests only: builds a small PDF fixture
 
 # Optional OCR for scanned PDFs (also needs Tesseract + Poppler installed on Windows):
 # pytesseract>=0.3.10

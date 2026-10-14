@@ -25,8 +25,9 @@ _lock = threading.Lock()
 _jobs: dict[str, dict[str, str]] = {}  # doc name -> {"scope", "state": "indexing…" | "failed: ..."}
 
 
-def read_sources(path: Path = SOURCES_CSV) -> list[dict[str, str]]:
+def read_sources(path: Path | None = None) -> list[dict[str, str]]:
     """Rows of sources.csv, skipping blank lines and lines starting with '#'."""
+    path = path or SOURCES_CSV
     if not path.exists():
         return []
     with open(path, encoding="utf-8", newline="") as f:
@@ -34,22 +35,25 @@ def read_sources(path: Path = SOURCES_CSV) -> list[dict[str, str]]:
     return [{k: (v or "").strip() for k, v in row.items()} for row in csv.DictReader(lines)]
 
 
-def read_manifest(path: Path = MANIFEST) -> dict[str, dict[str, Any]]:
+def read_manifest(path: Path | None = None) -> dict[str, dict[str, Any]]:
     """Manifest keyed by document name."""
+    path = path or MANIFEST
     if not path.exists():
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def write_manifest(data: dict[str, dict[str, Any]], path: Path = MANIFEST) -> None:
+def write_manifest(data: dict[str, dict[str, Any]], path: Path | None = None) -> None:
+    path = path or MANIFEST
     with _lock:
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(path)
 
 
-def update_manifest(doc: str, fields: dict[str, Any], path: Path = MANIFEST) -> None:
+def update_manifest(doc: str, fields: dict[str, Any], path: Path | None = None) -> None:
     """Merge `fields` into the manifest entry for `doc`."""
+    path = path or MANIFEST
     with _lock:
         data = read_manifest(path)
         data[doc] = {**data.get(doc, {}), **fields}
@@ -67,11 +71,11 @@ def set_job(doc: str, scope: str, state: str | None) -> None:
             _jobs[doc] = {"scope": scope, "state": state}
 
 
-def indexed_count(path: Path = MANIFEST) -> int:
+def indexed_count(path: Path | None = None) -> int:
     return sum(1 for e in read_manifest(path).values() if e.get("chunks"))
 
 
-def documents(sources: Path = SOURCES_CSV, manifest: Path = MANIFEST) -> list[dict[str, str]]:
+def documents(sources: Path | None = None, manifest: Path | None = None) -> list[dict[str, str]]:
     """Merged list for the sidebar: jobs first, then indexed docs, then planned ones."""
     man = read_manifest(manifest)
     out: list[dict[str, str]] = []

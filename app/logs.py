@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.config import LOGS_DIR
+from app import config
 
 _lock = threading.Lock()
 
@@ -22,8 +22,9 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def append(name: str, record: dict[str, Any], logs_dir: Path = LOGS_DIR) -> None:
+def append(name: str, record: dict[str, Any], logs_dir: Path | None = None) -> None:
     """Append `record` (with a timestamp) to `logs/<name>.jsonl`."""
+    logs_dir = logs_dir or config.LOGS_DIR
     logs_dir.mkdir(parents=True, exist_ok=True)
     line = json.dumps({"timestamp": now_iso(), **record}, ensure_ascii=False, default=str)
     with _lock, open(logs_dir / f"{name}.jsonl", "a", encoding="utf-8") as f:

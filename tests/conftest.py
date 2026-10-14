@@ -123,3 +123,46 @@ def store() -> FakeStore:
 @pytest.fixture
 def services(settings, llm, store) -> Services:
     return Services(settings, llm, store)
+
+
+@pytest.fixture(autouse=True)
+def isolated_files(tmp_path, monkeypatch):
+    """Keep tests from writing to the real data/manifest.json and logs/."""
+    from app import catalog, config
+
+    monkeypatch.setattr(catalog, "MANIFEST", tmp_path / "manifest.json")
+    monkeypatch.setattr(config, "LOGS_DIR", tmp_path / "logs")
+    catalog._jobs.clear()
+    yield
+
+
+ACT_PAGES = [
+    """CHAPTER V
+GRATUITY
+53. Payment of gratuity.—(1) Gratuity shall be payable to an employee on the termination of his
+employment after he has rendered continuous service for not less than five years.
+Provided that the completion of continuous service of five years shall not be necessary where
+the termination of the employment of any employee is due to death or disablement or in case of
+fixed term employee.""",
+    """54. Determination of gratuity.—(1) For every completed year of service the employer shall pay
+gratuity to an employee at the rate of fifteen days wages based on the rate of wages last drawn.
+55. Nomination.—Each employee shall make nomination for the purpose of gratuity.""",
+]
+
+
+@pytest.fixture
+def act_pdf(tmp_path):
+    """A two-page PDF that looks like an Act, built with reportlab."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    path = tmp_path / "ss-code.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    for page in ACT_PAGES:
+        y = 800
+        for line in page.splitlines():
+            c.drawString(40, y, line)
+            y -= 16
+        c.showPage()
+    c.save()
+    return path
