@@ -37,3 +37,9 @@ p.2 #1 [Section 55 · Nomination] '55. Nomination.—Each employee shall make no
 `POST /api/chat` with `"Gratuity rule for fixed term employee in Surat?"` and default state Maharashtra returns `type: "rag"`, `scope: {"state": "gujarat", "how": "detected"}` (the backend re-detected Surat), numbered citations, and `latency_ms`. `POST /api/chat/stream` sends `meta`, then `token` events, then `done` with the same JSON.
 
 **What to learn:** the threshold check happens *before* the LLM. When the best passage is weak, a model asked to answer anyway invents something plausible, so refusing early is the cheapest hallucination guard you have. Numbering passages and cleaning `[n]` markers that don't match a passage turns "the model says it has a source" into "the source exists". Follow-ups like "and for Gujarat?" retrieve nothing on their own, so they're rewritten into a full question first.
+
+## Step 5: calculator tools
+
+`"Calculate PF for basic ₹18,000"` is routed to `pf_calculator(basic=18000)`. With the shipped `data/rates.yaml` (all values `null`) it answers *"Rate not configured: `pf.employee_rate` is empty in data/rates.yaml, so I won't calculate."* Once you fill the values from the EPFO circular, it returns a 4-row table (employee PF, EPS, EPF, total) citing that circular.
+
+**What to learn:** this is "tool use" in its simplest form: the router spots a calculation and hands it to ordinary code. LLMs predict likely-looking digits rather than computing them, so payroll maths must never come from the model. Keeping every figure in one YAML file with its `source_doc` and `effective_date` means that when a rate changes you edit one line, and every answer still shows where the number came from.
