@@ -31,3 +31,9 @@ p.2 #1 [Section 55 · Nomination] '55. Nomination.—Each employee shall make no
 ```
 
 **What to learn:** chunking decides what the retriever can find. Cutting at every 1,000 characters would split "Section 54" in half and glue it to "Section 55", so the citation would be wrong and the passage would carry two topics. Splitting on legal headings first keeps one idea per chunk and gives every chunk a real citation. Deterministic vector ids (`doc-slug#sha1(doc|page|chunk)`) make re-runs overwrite rather than duplicate, and `--dry-run` lets you see a delete before it happens.
+
+## Step 4: RAG answers with citations (plus streaming)
+
+`POST /api/chat` with `"Gratuity rule for fixed term employee in Surat?"` and default state Maharashtra returns `type: "rag"`, `scope: {"state": "gujarat", "how": "detected"}` (the backend re-detected Surat), numbered citations, and `latency_ms`. `POST /api/chat/stream` sends `meta`, then `token` events, then `done` with the same JSON.
+
+**What to learn:** the threshold check happens *before* the LLM. When the best passage is weak, a model asked to answer anyway invents something plausible, so refusing early is the cheapest hallucination guard you have. Numbering passages and cleaning `[n]` markers that don't match a passage turns "the model says it has a source" into "the source exists". Follow-ups like "and for Gujarat?" retrieve nothing on their own, so they're rewritten into a full question first.

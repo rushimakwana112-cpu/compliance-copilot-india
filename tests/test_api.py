@@ -55,3 +55,61 @@ def test_documents_shape(client):
     docs = client.get("/api/documents").json()
     assert docs, "sources.csv ships with example rows"
     assert all({"name", "scope", "status", "meta"} <= set(d) for d in docs)
+
+
+def _rag_llm(messages, json_mode):
+    return "Yes. Fixed-term employees qualify for gratuity [1]."
+
+
+def test_chat_rag_contract(services, store, llm):
+    llm.responder = _rag_llm
+    store.add("gratuity fixed term employee continuous service", doc="Code on Social Security, 2020", section="Section 53",
+              page=40, scope="central", status="current", doc_type="act")
+    with TestClient(create_app(services)) as c:
+        r = c.post("/api/chat", json={"message": "Gratuity rule for fixed term employee in Surat?", "history": [],
+                                      "jurisdiction": {"central": True, "state": "maharashtra", "mode": "auto", "detected": False}})
+    body = r.json()
+    assert r.status_code == 200
+    assert body["type"] == "rag"
+    assert body["scope"] == {"state": "gujarat", "how": "detected"}  # backend re-detects "Surat"
+    assert {"doc", "section", "page", "score", "snippet", "url"} <= set(body["citations"][0])
+    assert isinstance(body["latency_ms"], int)
+
+
+def test_chat_not_found_contract(client):
+    body = client.post("/api/chat", json={"message": "Gratuity rule in Dubai?"}).json()
+    assert body["type"] == "not_found" and body["citations"] == []
+
+
+def test_chat_stream_events(services, store, llm):
+    llm.responder = _rag_llm
+    store.add("gratuity fixed term employee", doc="SS Code", page=1, scope="central", status="current", doc_type="act")
+    with TestClient(create_app(services)) as c:
+        text = c.post("/api/chat/stream", json={"message": "gratuity fixed term employee"}).text
+    names = [ln.split(": ", 1)[1] for ln in text.splitlines() if ln.startswith("event: ")]
+    assert names[0] == "meta" and names[-1] == "done" and "token" in names
+
+
+def test_feedback_logged(client, tmp_path):
+    r = client.post("/api/feedback", json={"value": "down", "answer": {"type": "rag", "answer": "x"}, "question": "q?"})
+    assert r.json() == {"ok": True}
+    assert '"value": "down"' in (tmp_path / "logs" / "feedback.jsonl").read_text()
+
+
+def test_ingest_rejects_non_pdf_and_http(client):
+    r = client.post("/api/ingest/file", files={"file": ("a.pdf", b"hello", "application/pdf")}, data={"scope": "central"})
+    assert r.status_code == 415
+    assert client.post("/api/ingest/url", json={"url": "http://example.gov.in/a.pdf"}).status_code == 422
+    assert client.post("/api/ingest/file", files={"file": ("a.pdf", b"%PDF-1.4", "application/pdf")},
+                       data={"scope": "atlantis"}).status_code == 422
+
+
+def test_ingest_file_shows_in_documents(client, act_pdf, monkeypatch, tmp_path):
+    from app import main
+
+    monkeypatch.setattr(main, "UPLOAD_DIR", tmp_path / "uploads")
+    r = client.post("/api/ingest/file", files={"file": ("EPFO_circular.pdf", act_pdf.read_bytes(), "application/pdf")},
+                    data={"scope": "gujarat"})
+    assert r.status_code == 200 and r.json()["name"] == "EPFO circular"
+    docs = {d["name"]: d for d in client.get("/api/documents").json()}
+    assert docs["EPFO circular"]["scope"] == "gujarat"  # indexed in the background by the time we ask
