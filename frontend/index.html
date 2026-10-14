@@ -1,0 +1,1013 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compliance Copilot · Cyber Panther</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   THEME TOKENS
+   dark  = "Cyber Panther": near-black, neon cyan + violet, grid glow
+   light = "Heroic": cream ground, sky blue, deep navy ink, gold accents
+   ============================================================ */
+:root, [data-theme="dark"] {
+  --bg: #06080C;
+  --bg-2: #0A0E15;
+  --panel: rgba(13, 19, 29, 0.78);
+  --panel-solid: #0D131D;
+  --panel-2: rgba(22, 31, 46, 0.7);
+  --line: rgba(110, 200, 255, 0.14);
+  --line-strong: rgba(110, 200, 255, 0.32);
+  --text: #E7F1FF;
+  --muted: #93A6BF;
+  --accent: #22D3EE;
+  --accent-2: #A78BFA;
+  --accent-ink: #00141A;
+  --accent-soft: rgba(34, 211, 238, 0.12);
+  --accent-2-soft: rgba(167, 139, 250, 0.14);
+  --ok: #34D399;
+  --warn: #FBBF24;
+  --warn-bg: rgba(251, 191, 36, 0.08);
+  --warn-line: rgba(251, 191, 36, 0.35);
+  --sql: #7DD3FC;
+  --user-bg: rgba(34, 211, 238, 0.1);
+  --user-line: rgba(34, 211, 238, 0.45);
+  --user-text: #E7F1FF;
+  --code-bg: #04060A;
+  --code-text: #BDEBFF;
+  --glow: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 24px rgba(34, 211, 238, 0.18);
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  --radius: 14px;
+  --font-display: "Chakra Petch", "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --bg: #FBF7EE;
+  --bg-2: #F4EDDF;
+  --panel: rgba(255, 255, 255, 0.9);
+  --panel-solid: #FFFFFF;
+  --panel-2: #F7F1E4;
+  --line: #E4DAC6;
+  --line-strong: #CDBF9F;
+  --text: #13233D;
+  --muted: #586378;
+  --accent: #1D57A5;
+  --accent-2: #A87516;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #DCEAFB;
+  --accent-2-soft: #F6E7C6;
+  --ok: #17804A;
+  --warn: #9A5B05;
+  --warn-bg: #FFF4DD;
+  --warn-line: #E8C783;
+  --sql: #1D57A5;
+  --user-bg: #13233D;
+  --user-line: #13233D;
+  --user-text: #FBF7EE;
+  --code-bg: #13233D;
+  --code-text: #E3EEFF;
+  --glow: 0 0 0 1px #1D57A5, 0 6px 20px rgba(29, 87, 165, 0.18);
+  --shadow: 0 10px 30px rgba(19, 35, 61, 0.08);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  transition: background-color .35s ease, color .35s ease;
+}
+/* Background atmosphere */
+body::before {
+  content: "";
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+}
+[data-theme="dark"] body::before {
+  background:
+    radial-gradient(900px 500px at 85% -10%, rgba(167,139,250,.16), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(34,211,238,.12), transparent 60%),
+    linear-gradient(rgba(110,200,255,.05) 1px, transparent 1px) 0 0 / 44px 44px,
+    linear-gradient(90deg, rgba(110,200,255,.05) 1px, transparent 1px) 0 0 / 44px 44px,
+    var(--bg);
+}
+[data-theme="light"] body::before {
+  background:
+    radial-gradient(1000px 420px at 50% -15%, #DCEAFB, transparent 70%),
+    radial-gradient(700px 400px at 100% 100%, rgba(168,117,22,.08), transparent 70%),
+    var(--bg);
+}
+
+a { color: var(--accent); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+/* ============================ LAYOUT ============================ */
+.app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+.workspace {
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr) 320px;
+  min-height: 0;
+}
+
+/* ============================ HEADER ============================ */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  position: relative; z-index: 5;
+}
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand-mark {
+  width: 42px; height: 42px; flex: none; border-radius: 11px;
+  display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink);
+  box-shadow: var(--glow);
+}
+.brand-name { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: .02em; line-height: 1.1; }
+.brand-sub { font-size: 12.5px; color: var(--muted); }
+.brand-sub b { color: var(--accent-2); font-weight: 600; }
+.top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: 999px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  font-size: 12.5px; color: var(--muted); white-space: nowrap;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.dot.on { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+.btn {
+  min-height: 42px; padding: 0 14px; border-radius: 10px;
+  border: 1px solid var(--line-strong); background: var(--panel-solid);
+  display: inline-flex; align-items: center; gap: 8px; font-weight: 500;
+  transition: border-color .2s, box-shadow .2s, transform .1s;
+}
+.btn:hover { border-color: var(--accent); box-shadow: var(--glow); }
+.btn:active { transform: translateY(1px); }
+.icon-btn { width: 42px; padding: 0; justify-content: center; }
+.only-mobile { display: none; }
+
+/* ============================ SIDEBAR ============================ */
+.sidebar {
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  overflow-y: auto;
+  padding: 20px 18px;
+  display: flex; flex-direction: column; gap: 22px;
+}
+.section-title {
+  font-family: var(--font-display);
+  font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.seg {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px;
+}
+.seg button {
+  min-height: 36px; border: 0; border-radius: 7px; background: transparent;
+  color: var(--muted); font-weight: 600; font-size: 13.5px;
+  transition: background .2s, color .2s, box-shadow .2s;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: var(--glow); }
+.field { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.field label { font-size: 12.5px; color: var(--muted); }
+select {
+  min-height: 42px; padding: 0 12px; border-radius: 10px;
+  background: var(--panel-solid); border: 1px solid var(--line-strong);
+}
+select:disabled { opacity: .55; }
+.lock-chip {
+  margin-top: 12px; display: flex; align-items: center; gap: 8px;
+  font-size: 13px; padding: 8px 10px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--text);
+}
+.hint { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; }
+
+.doc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.doc-list li {
+  display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: start;
+  padding: 9px 8px; border-radius: 8px; transition: background .2s;
+}
+.doc-list li:hover { background: var(--accent-soft); }
+.doc-list li.dim { opacity: .45; }
+.doc-name { font-size: 13.5px; font-weight: 500; line-height: 1.3; }
+.doc-meta { font-size: 12px; color: var(--muted); }
+.tag {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+  background: var(--accent-soft); color: var(--accent);
+}
+.tag.state { background: var(--accent-2-soft); color: var(--accent-2); }
+.tag.old { background: var(--warn-bg); color: var(--warn); }
+
+.add-source { display: flex; flex-direction: column; gap: 8px; }
+.dropzone {
+  border: 1.5px dashed var(--line-strong); border-radius: 10px;
+  min-height: 46px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: transparent; font-weight: 500; font-size: 13.5px; width: 100%;
+}
+.dropzone:hover { border-color: var(--accent); background: var(--accent-soft); }
+.link-row { display: flex; gap: 6px; }
+.link-row input {
+  flex: 1; min-width: 0; min-height: 42px; padding: 0 10px; border-radius: 10px;
+  background: var(--panel-solid); border: 1px solid var(--line-strong); font-size: 13px;
+}
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 12.5px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; font-family: "JetBrains Mono", monospace; font-size: 12px; }
+
+/* ============================ CHAT ============================ */
+.chat { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.messages { flex: 1; overflow-y: auto; padding: 28px 24px 12px; scroll-behavior: smooth; }
+.thread { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+.welcome { text-align: center; padding: 36px 8px 8px; }
+.welcome h1 {
+  font-family: var(--font-display); font-weight: 700; font-size: clamp(26px, 4vw, 38px);
+  line-height: 1.15; margin: 0 0 10px; letter-spacing: .01em;
+}
+.welcome h1 span { color: var(--accent); }
+[data-theme="dark"] .welcome h1 span { text-shadow: 0 0 22px rgba(34,211,238,.45); }
+.welcome p { color: var(--muted); margin: 0 auto 22px; max-width: 520px; }
+.starter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; text-align: left; }
+.starter {
+  padding: 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); display: flex; flex-direction: column; gap: 4px;
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+}
+.starter:hover { border-color: var(--accent); box-shadow: var(--glow); transform: translateY(-2px); }
+.starter b { font-size: 14px; }
+.starter span { font-size: 12.5px; color: var(--muted); }
+
+.msg { animation: rise .35s ease both; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.msg.user {
+  align-self: flex-end; max-width: 82%;
+  padding: 11px 16px; border-radius: 16px 16px 4px 16px;
+  background: var(--user-bg); border: 1px solid var(--user-line); color: var(--user-text);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.msg.bot {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+  box-shadow: var(--shadow);
+  transition: border-color .2s, box-shadow .2s;
+}
+.msg.bot.active { border-color: var(--accent); box-shadow: var(--glow); }
+.msg.bot.notfound { background: var(--warn-bg); border-color: var(--warn-line); }
+.meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.badge {
+  font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 999px;
+}
+.badge.rag { background: var(--accent-soft); color: var(--accent); }
+.badge.tool { background: var(--accent-2-soft); color: var(--accent-2); }
+.badge.sql { background: var(--accent-soft); color: var(--sql); }
+.badge.nf { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-line); }
+.scope-chip { display: inline-flex; gap: 6px; align-items: center; }
+.answer p { margin: 0 0 8px; }
+.answer p:last-child { margin: 0; }
+.cites { display: flex; flex-wrap: wrap; gap: 8px; }
+.cite {
+  min-height: 34px; padding: 0 12px; border-radius: 8px; font-size: 12.5px;
+  border: 1px solid var(--line-strong); background: var(--panel-2);
+  transition: border-color .2s, background .2s;
+}
+.cite:hover, .cite[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 420px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line-strong); }
+td { padding: 9px 0; border-bottom: 1px solid var(--line); }
+td.num, th.num { text-align: right; }
+tr.total td { font-weight: 600; border-bottom: 0; color: var(--accent); }
+pre.code {
+  margin: 0; padding: 12px 14px; border-radius: 10px;
+  background: var(--code-bg); color: var(--code-text);
+  font-family: "JetBrains Mono", monospace; font-size: 13px; overflow-x: auto;
+  border: 1px solid var(--line);
+}
+.note { font-size: 12.5px; color: var(--muted); }
+.feedback { display: flex; gap: 6px; }
+.feedback button {
+  width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line);
+  background: transparent; display: grid; place-items: center; color: var(--muted);
+}
+.feedback button:hover, .feedback button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+
+.typing { display: inline-flex; gap: 5px; padding: 4px 0; }
+.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: blink 1.2s infinite ease-in-out; }
+.typing i:nth-child(2) { animation-delay: .15s; }
+.typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes blink { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
+
+/* Composer */
+.composer-wrap { padding: 10px 24px 18px; border-top: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(14px); }
+.composer { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.scope-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.scope-line strong { color: var(--text); font-weight: 600; }
+.scope-line .why { font-style: italic; }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.chip {
+  flex: none; min-height: 34px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: var(--panel-solid); font-size: 13px; color: var(--muted);
+}
+.chip:hover { color: var(--text); border-color: var(--accent); }
+.input-row {
+  display: flex; gap: 8px; align-items: flex-end; padding: 6px;
+  border-radius: 14px; background: var(--panel-solid); border: 1px solid var(--line-strong);
+  transition: border-color .2s, box-shadow .2s;
+}
+.input-row:focus-within { border-color: var(--accent); box-shadow: var(--glow); }
+.input-row textarea {
+  flex: 1; min-width: 0; resize: none; border: 0; outline: none; background: transparent;
+  font: inherit; color: var(--text); padding: 10px; max-height: 160px; min-height: 44px;
+}
+.send {
+  width: 46px; height: 46px; flex: none; border-radius: 10px; border: 0;
+  background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
+  box-shadow: var(--glow); transition: transform .1s, opacity .2s;
+}
+.send:disabled { opacity: .45; box-shadow: none; cursor: not-allowed; }
+.send:not(:disabled):active { transform: scale(.96); }
+.disclaimer { font-size: 12px; color: var(--muted); text-align: center; }
+
+/* ============================ SOURCES ============================ */
+.sources {
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  overflow-y: auto; padding: 20px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.src-empty { font-size: 13px; color: var(--muted); padding: 14px; border: 1px dashed var(--line-strong); border-radius: 12px; }
+.src {
+  border: 1px solid var(--line); border-radius: 12px; padding: 13px;
+  background: var(--panel-2); display: flex; flex-direction: column; gap: 8px;
+  animation: rise .3s ease both;
+}
+.src.hl { border-color: var(--accent); box-shadow: var(--glow); }
+.src-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.src-head b { font-weight: 600; }
+.src-snippet { font-size: 13px; color: var(--muted); border-left: 2px solid var(--accent-2); padding-left: 10px; }
+.score { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.bar { flex: 1; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .6s ease; }
+.src a { font-size: 12.5px; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--panel-solid); border: 1px solid var(--accent); color: var(--text);
+  padding: 10px 16px; border-radius: 10px; box-shadow: var(--glow);
+  opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 50; font-size: 14px;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ============================ RESPONSIVE ============================ */
+@media (max-width: 1180px) {
+  .workspace { grid-template-columns: 270px minmax(0, 1fr); }
+  .sources {
+    position: fixed; right: 0; top: 0; bottom: 0; width: min(360px, 92vw); z-index: 30;
+    transform: translateX(100%); transition: transform .3s ease; box-shadow: var(--shadow);
+    background: var(--panel-solid);
+  }
+  .sources.open { transform: none; }
+  .only-sources { display: inline-flex; }
+}
+@media (min-width: 1181px) { .only-sources { display: none; } }
+@media (max-width: 820px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; width: min(320px, 92vw); z-index: 30;
+    transform: translateX(-100%); transition: transform .3s ease; box-shadow: var(--shadow);
+    background: var(--panel-solid);
+  }
+  .sidebar.open { transform: none; }
+  .only-mobile { display: inline-flex; }
+  .brand-sub, .pill.hide-sm, .hide-sm-label { display: none; }
+  #newChat { width: 42px; padding: 0; justify-content: center; }
+  .brand-name { font-size: 18px; }
+  .messages { padding: 18px 16px 8px; }
+  .composer-wrap { padding: 10px 16px 14px; }
+  .starter-grid { grid-template-columns: 1fr; }
+  .topbar { padding: 10px 16px; }
+}
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 25; display: none; }
+.scrim.show { display: block; }
+.drawer-close { display: none; }
+@media (max-width: 1180px) { .sources .drawer-close { display: inline-flex; } }
+@media (max-width: 820px) { .sidebar .drawer-close { display: inline-flex; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ======================= HEADER ======================= -->
+  <header class="topbar">
+    <div class="brand">
+      <button class="btn icon-btn only-mobile" id="openSidebar" aria-label="Open filters and documents" aria-controls="sidebar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      </button>
+      <div class="brand-mark" aria-hidden="true">
+        <!-- Abstract geometric mark: shield + check -->
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l8 3.2v6.1c0 4.6-3.4 8.5-8 9.7-4.6-1.2-8-5.1-8-9.7V5.7z"/><path d="M8.3 12.2l2.6 2.6 4.8-5.2"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">Compliance Copilot</div>
+        <div class="brand-sub">Indian payroll &amp; labour law, with sources · by <b>Cyber Panther</b></div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="pill hide-sm" id="statusPill" title="Backend status"><span class="dot" id="statusDot"></span><span id="statusText">Checking…</span></span>
+      <button class="btn icon-btn only-sources" id="openSources" aria-label="Show sources" aria-controls="sources">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h11a3 3 0 0 1 3 3v11H7a3 3 0 0 1-3-3z"/><path d="M8 9h6M8 13h6"/></svg>
+      </button>
+      <button class="btn icon-btn" id="themeToggle" aria-label="Switch to light mode">
+        <svg id="themeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+      </button>
+      <button class="btn" id="newChat" aria-label="New chat">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span class="hide-sm-label">New chat</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="workspace">
+
+    <!-- ======================= LEFT SIDEBAR ======================= -->
+    <aside class="sidebar" id="sidebar" aria-label="Jurisdiction and knowledge base">
+      <button class="btn drawer-close" data-close="sidebar" aria-label="Close panel" style="align-self:flex-end">Close</button>
+
+      <section>
+        <h2 class="section-title">Jurisdiction</h2>
+        <div class="card">
+          <div class="seg" role="group" aria-label="State selection mode">
+            <button type="button" id="modeAuto" aria-pressed="true">Auto-detect</button>
+            <button type="button" id="modeManual" aria-pressed="false">Manual</button>
+          </div>
+          <div class="field">
+            <label for="stateSelect" id="stateLabel">Default state (used when none is detected)</label>
+            <select id="stateSelect"></select>
+          </div>
+          <div class="lock-chip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+            Central law is always included
+          </div>
+          <p class="hint" id="modeHint">Auto-detect reads state or city names in your question (e.g. "Ahmedabad" → Gujarat).</p>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="section-title">Knowledge base <span id="docCount" style="letter-spacing:0;text-transform:none;font-family:'IBM Plex Sans',sans-serif"></span></h2>
+        <ul class="doc-list" id="docList"></ul>
+      </section>
+
+      <section>
+        <h2 class="section-title">Add a source</h2>
+        <div class="add-source">
+          <input type="file" id="fileInput" accept="application/pdf" class="sr-only" multiple>
+          <button type="button" class="dropzone" id="uploadBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
+            Upload a circular (PDF)
+          </button>
+          <form class="link-row" id="linkForm">
+            <label for="linkInput" class="sr-only">Paste an official document link</label>
+            <input id="linkInput" type="url" placeholder="Paste official link (.gov.in)…" required>
+            <button class="btn" type="submit">Add</button>
+          </form>
+        </div>
+      </section>
+
+      <section style="margin-top:auto">
+        <h2 class="section-title">Pipeline</h2>
+        <dl class="kv">
+          <dt>LLM</dt><dd>Ollama · qwen2.5:7b</dd>
+          <dt>Embeddings</dt><dd>bge-m3</dd>
+          <dt>Vector DB</dt><dd>Pinecone</dd>
+          <dt>Data</dt><dd>sample_payroll.db</dd>
+          <dt>Mode</dt><dd id="modeLabel">demo</dd>
+        </dl>
+      </section>
+    </aside>
+
+    <!-- ======================= CHAT ======================= -->
+    <main class="chat">
+      <div class="messages" id="messages" aria-live="polite">
+        <div class="thread" id="thread"></div>
+      </div>
+
+      <div class="composer-wrap">
+        <form class="composer" id="composer">
+          <div class="scope-line" id="scopeLine"></div>
+          <div class="chips" id="chips"></div>
+          <div class="input-row">
+            <label for="input" class="sr-only">Ask a compliance question</label>
+            <textarea id="input" rows="1" placeholder="Ask about PF, ESIC, wages, bonus, gratuity, PT, TDS…"></textarea>
+            <button class="send" id="sendBtn" type="submit" aria-label="Send" disabled>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+          <div class="disclaimer">For reference only. Always confirm against the cited official document.</div>
+        </form>
+      </div>
+    </main>
+
+    <!-- ======================= SOURCES ======================= -->
+    <aside class="sources" id="sources" aria-label="Sources for the selected answer">
+      <button class="btn drawer-close" data-close="sources" aria-label="Close sources" style="align-self:flex-end">Close</button>
+      <div>
+        <h2 class="section-title" style="margin-bottom:2px">Sources</h2>
+        <div class="note" id="srcFor">Select an answer to see the passages it used.</div>
+      </div>
+      <div id="srcList"><div class="src-empty">No answer selected yet.</div></div>
+      <div class="note">Score = similarity from Pinecone. Below the threshold the bot answers "Not in my documents".</div>
+    </aside>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ==================================================================
+   CONFIG — change API_BASE when the backend is running.
+   If the backend is unreachable the UI falls back to DEMO mode.
+   ================================================================== */
+const API_BASE = "";              // same origin when served by FastAPI, e.g. "" or "http://localhost:8000"
+let LIVE = false;                 // set true automatically if /api/health answers
+
+const STATES = [
+  { id: "gujarat", name: "Gujarat", aliases: ["gujarat", "ahmedabad", "surat", "vadodara", "baroda", "rajkot", "gandhinagar"] },
+  { id: "maharashtra", name: "Maharashtra", aliases: ["maharashtra", "mumbai", "pune", "nagpur", "nashik", "thane"] },
+  { id: "karnataka", name: "Karnataka", aliases: ["karnataka", "bengaluru", "bangalore", "mysuru", "mysore"] },
+  { id: "delhi", name: "Delhi", aliases: ["delhi", "new delhi"] },
+  { id: "madhya-pradesh", name: "Madhya Pradesh", aliases: ["madhya pradesh", "indore", "bhopal"] },
+  { id: "tamil-nadu", name: "Tamil Nadu", aliases: ["tamil nadu", "chennai", "coimbatore"] },
+  { id: "telangana", name: "Telangana", aliases: ["telangana", "hyderabad"] },
+  { id: "rajasthan", name: "Rajasthan", aliases: ["rajasthan", "jaipur", "udaipur"] },
+  { id: "uttar-pradesh", name: "Uttar Pradesh", aliases: ["uttar pradesh", "lucknow", "noida", "kanpur"] },
+  { id: "west-bengal", name: "West Bengal", aliases: ["west bengal", "kolkata"] }
+];
+
+// Demo knowledge base — replace with GET /api/documents
+let DOCS = [
+  { name: "Code on Wages, 2019", scope: "central", status: "current", meta: "In force 21 Nov 2025" },
+  { name: "Code on Social Security, 2020", scope: "central", status: "current", meta: "In force 21 Nov 2025" },
+  { name: "Central Rules & Ministry FAQs", scope: "central", status: "current", meta: "[date]" },
+  { name: "EPFO rate & due-date circulars", scope: "central", status: "current", meta: "[date]" },
+  { name: "ESIC wage-ceiling notification", scope: "central", status: "current", meta: "[date]" },
+  { name: "CBDT circular: TDS on salaries", scope: "central", status: "current", meta: "FY [year]" },
+  { name: "Gujarat Rules under the Codes", scope: "gujarat", status: "current", meta: "[date]" },
+  { name: "Gujarat Professional Tax schedule", scope: "gujarat", status: "current", meta: "[date]" },
+  { name: "Maharashtra Rules under the Codes", scope: "maharashtra", status: "current", meta: "[date]" },
+  { name: "Payment of Gratuity Act, 1972", scope: "central", status: "repealed", meta: "Replaced by SS Code" }
+];
+
+const SUGGESTIONS = [
+  "Is ESIC applicable on ₹24,000 gross?",
+  "Calculate PF for basic ₹18,000",
+  "Professional tax for ₹15,000 salary in Ahmedabad",
+  "Which sample employees are above the ESIC limit?",
+  "Gratuity rule for fixed-term employees",
+  "Gratuity rule in Dubai?"
+];
+
+const STARTERS = [
+  { t: "Check applicability", s: "Is ESIC applicable on ₹24,000 gross?" },
+  { t: "Run a calculation", s: "Calculate PF for basic ₹18,000" },
+  { t: "State-specific rule", s: "Professional tax for ₹15,000 salary in Ahmedabad" },
+  { t: "Query sample data", s: "Which sample employees are above the ESIC limit?" }
+];
+
+/* ============================ STATE ============================ */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+const ui = {
+  mode: store.get("cc-mode", "auto"),        // "auto" | "manual"
+  defaultState: store.get("cc-state", "gujarat"),
+  history: [],                                // [{role, content}]
+  answers: {},                                // id -> answer payload
+  activeId: null,
+  busy: false
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtINR = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+const stateName = (id) => (STATES.find((s) => s.id === id) || {}).name || id;
+
+/* ============================ THEME ============================ */
+const SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+const MOON = '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>';
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  $("themeIcon").innerHTML = t === "dark" ? SUN : MOON;
+  $("themeToggle").setAttribute("aria-label", t === "dark" ? "Switch to light mode" : "Switch to dark mode");
+  store.set("cc-theme", t);
+}
+(function initTheme() {
+  let t = store.get("cc-theme", null);
+  if (!t) t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  applyTheme(t);
+})();
+$("themeToggle").addEventListener("click", () => {
+  applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+});
+
+/* ============================ JURISDICTION ============================ */
+function detectState(text) {
+  const q = " " + text.toLowerCase() + " ";
+  for (const s of STATES) {
+    for (const a of s.aliases) {
+      if (q.includes(" " + a + " ") || q.includes(" " + a + "?") || q.includes(" " + a + ",") || q.includes(" " + a + ".")) {
+        return { id: s.id, match: a };
+      }
+    }
+  }
+  return null;
+}
+function resolveScope(text) {
+  if (ui.mode === "manual") return { state: ui.defaultState, how: "manual", match: null };
+  const d = detectState(text || "");
+  if (d) return { state: d.id, how: "detected", match: d.match };
+  return { state: ui.defaultState, how: "default", match: null };
+}
+function renderScopeLine() {
+  const r = resolveScope($("input").value);
+  let why = "";
+  if (r.how === "detected") why = `<span class="why">auto-detected from “${esc(r.match)}”</span>`;
+  else if (r.how === "default") why = `<span class="why">default state · mention a state or city to switch</span>`;
+  else why = `<span class="why">manual selection</span>`;
+  $("scopeLine").innerHTML =
+    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+     Searching <strong>Central + ${esc(stateName(r.state))}</strong> ${why}`;
+  renderDocs(r.state);
+}
+function initJurisdiction() {
+  $("stateSelect").innerHTML = STATES.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
+  $("stateSelect").value = ui.defaultState;
+  const setMode = (m) => {
+    ui.mode = m; store.set("cc-mode", m);
+    $("modeAuto").setAttribute("aria-pressed", m === "auto");
+    $("modeManual").setAttribute("aria-pressed", m === "manual");
+    $("stateLabel").textContent = m === "auto" ? "Default state (used when none is detected)" : "State";
+    $("modeHint").textContent = m === "auto"
+      ? "Auto-detect reads state or city names in your question (e.g. “Ahmedabad” → Gujarat)."
+      : "Only the selected state's rules are searched, together with central law.";
+    renderScopeLine();
+  };
+  $("modeAuto").onclick = () => setMode("auto");
+  $("modeManual").onclick = () => setMode("manual");
+  $("stateSelect").onchange = (e) => { ui.defaultState = e.target.value; store.set("cc-state", ui.defaultState); renderScopeLine(); };
+  setMode(ui.mode);
+}
+
+/* ============================ KNOWLEDGE BASE ============================ */
+function renderDocs(activeState) {
+  const docIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-top:2px;color:var(--muted)"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
+  $("docList").innerHTML = DOCS.map((d) => {
+    const inScope = d.scope === "central" || d.scope === activeState;
+    const dim = !inScope || d.status !== "current";
+    const tag = d.status !== "current"
+      ? `<span class="tag old">${esc(d.status)}</span>`
+      : `<span class="tag ${d.scope === "central" ? "" : "state"}">${esc(d.scope === "central" ? "Central" : stateName(d.scope))}</span>`;
+    return `<li class="${dim ? "dim" : ""}" title="${dim ? "Not searched for this question" : "Searched"}">${docIcon}
+      <div><div class="doc-name">${esc(d.name)}</div><div class="doc-meta">${esc(d.meta)}</div></div>${tag}</li>`;
+  }).join("");
+  const n = DOCS.filter((d) => (d.scope === "central" || d.scope === activeState) && d.status === "current").length;
+  $("docCount").textContent = `${n} of ${DOCS.length} in scope`;
+}
+
+/* ============================ CHAT RENDERING ============================ */
+function renderWelcome() {
+  $("thread").innerHTML = `
+    <div class="welcome">
+      <h1>Ask Indian payroll law.<br><span>Get answers with proof.</span></h1>
+      <p>Every answer cites the official document and page it came from. Calculations run in code, not in the model.</p>
+      <div class="starter-grid">
+        ${STARTERS.map((s) => `<button type="button" class="starter" data-q="${esc(s.s)}"><b>${esc(s.t)}</b><span>${esc(s.s)}</span></button>`).join("")}
+      </div>
+    </div>`;
+  $("thread").querySelectorAll(".starter").forEach((b) => b.onclick = () => ask(b.dataset.q));
+}
+function renderChips() {
+  $("chips").innerHTML = SUGGESTIONS.map((s) => `<button type="button" class="chip">${esc(s)}</button>`).join("");
+  $("chips").querySelectorAll(".chip").forEach((b) => b.onclick = () => ask(b.textContent));
+}
+function addUser(text) {
+  const w = $("thread").querySelector(".welcome"); if (w) w.remove();
+  const el = document.createElement("div");
+  el.className = "msg user"; el.textContent = text;
+  $("thread").appendChild(el); scrollDown();
+}
+function addTyping() {
+  const el = document.createElement("div");
+  el.className = "msg bot"; el.id = "typing";
+  el.innerHTML = `<div class="meta-row"><span>Searching documents…</span></div><div class="typing" aria-label="Thinking"><i></i><i></i><i></i></div>`;
+  $("thread").appendChild(el); scrollDown();
+}
+function removeTyping() { const t = $("typing"); if (t) t.remove(); }
+function scrollDown() { const m = $("messages"); m.scrollTop = m.scrollHeight; }
+
+const BADGE = {
+  rag: '<span class="badge rag">From documents</span>',
+  tool: '<span class="badge tool">Calculator tool</span>',
+  sql: '<span class="badge sql">SQL query</span>',
+  not_found: '<span class="badge nf">Not in my documents</span>'
+};
+
+function addBot(a) {
+  const id = "a" + Date.now() + Math.random().toString(16).slice(2, 6);
+  ui.answers[id] = a;
+  const el = document.createElement("article");
+  el.className = "msg bot" + (a.type === "not_found" ? " notfound" : "");
+  el.dataset.id = id;
+  const scope = a.scope ? `<span class="scope-chip">· Central + ${esc(stateName(a.scope.state))}</span>` : "";
+  const extra = a.type === "tool" && a.tool ? `<span class="mono">${esc(a.tool)}</span>`
+              : a.type === "sql" ? `<span>${esc(a.rows_scanned ?? "")} rows scanned</span>`
+              : a.type === "rag" ? `<span>${(a.citations || []).length} passages</span>` : "";
+  let html = `<div class="meta-row">${BADGE[a.type] || ""}${extra}${scope}</div>`;
+  html += `<div class="answer">${(a.answer || "").split(/\n\n+/).map((p) => `<p>${esc(p)}</p>`).join("")}</div>`;
+
+  if (a.table && a.table.rows) {
+    html += `<div class="table-wrap"><table><thead><tr>${a.table.columns.map((c, i) => `<th class="${i === a.table.columns.length - 1 ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>`;
+    a.table.rows.forEach((r, ri) => {
+      const isTotal = a.table.totalRow && ri === a.table.rows.length - 1;
+      html += `<tr class="${isTotal ? "total" : ""}">${r.map((c, i) => `<td class="${i === r.length - 1 ? "num" : ""}">${esc(c)}</td>`).join("")}</tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+  if (a.sql) html += `<pre class="code"><code>${esc(a.sql)}</code></pre>`;
+  if (a.note) html += `<div class="note">${esc(a.note)}</div>`;
+  if (a.citations && a.citations.length) {
+    html += `<div class="cites">${a.citations.map((c, i) => `<button type="button" class="cite" data-i="${i}" aria-pressed="false">[${i + 1}] ${esc(c.doc)}${c.section ? " · " + esc(c.section) : ""}${c.page ? " · p. " + esc(c.page) : ""}</button>`).join("")}</div>`;
+  }
+  html += `<div class="meta-row" style="justify-content:space-between"><span>${LIVE ? "" : "Demo answer · connect the backend for real results"}</span>
+    <div class="feedback"><button type="button" aria-label="Helpful" data-fb="up" aria-pressed="false">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v9H4v-9zM7 11l4-8a2 2 0 0 1 2 2v4h6a2 2 0 0 1 2 2.3l-1.3 7A2 2 0 0 1 17.7 20H7"/></svg></button>
+      <button type="button" aria-label="Not helpful" data-fb="down" aria-pressed="false">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 13V4h3v9zM17 13l-4 8a2 2 0 0 1-2-2v-4H5a2 2 0 0 1-2-2.3l1.3-7A2 2 0 0 1 6.3 4H17"/></svg></button></div></div>`;
+  el.innerHTML = html;
+
+  el.addEventListener("click", (e) => {
+    const cite = e.target.closest(".cite");
+    const fb = e.target.closest("[data-fb]");
+    if (fb) {
+      el.querySelectorAll("[data-fb]").forEach((b) => b.setAttribute("aria-pressed", b === fb));
+      sendFeedback(a, fb.dataset.fb);
+      toast(fb.dataset.fb === "up" ? "Thanks! Logged as helpful." : "Logged. This question goes into the eval set.");
+      return;
+    }
+    selectAnswer(id, cite ? Number(cite.dataset.i) : null);
+    if (cite && window.matchMedia("(max-width: 1180px)").matches) openDrawer("sources");
+  });
+
+  $("thread").appendChild(el);
+  selectAnswer(id, null);
+  scrollDown();
+}
+
+function selectAnswer(id, highlight) {
+  ui.activeId = id;
+  document.querySelectorAll(".msg.bot").forEach((m) => m.classList.toggle("active", m.dataset.id === id));
+  const a = ui.answers[id];
+  document.querySelectorAll(`.msg.bot[data-id="${id}"] .cite`).forEach((b, i) => b.setAttribute("aria-pressed", i === highlight));
+  const list = $("srcList");
+  if (!a || !a.citations || !a.citations.length) {
+    $("srcFor").textContent = a && a.type === "not_found" ? "No passage scored above the threshold." : "This answer did not use document passages.";
+    list.innerHTML = `<div class="src-empty">${a && a.type === "not_found" ? "Nothing relevant was found, so the bot refused to guess." : "No sources for this answer."}</div>`;
+    return;
+  }
+  $("srcFor").textContent = "Passages used for the selected answer";
+  list.innerHTML = a.citations.map((c, i) => `
+    <div class="src ${i === highlight ? "hl" : ""}" id="src-${i}">
+      <div class="src-head"><b>[${i + 1}] ${esc(c.doc)}</b><span style="color:var(--muted)">${c.page ? "p. " + esc(c.page) : ""}</span></div>
+      ${c.section ? `<div class="note">${esc(c.section)}</div>` : ""}
+      <div class="src-snippet">${esc(c.snippet)}</div>
+      <div class="score"><div class="bar"><i style="width:${Math.round((c.score || 0) * 100)}%"></i></div><span class="mono">${(c.score ?? 0).toFixed(2)}</span></div>
+      ${c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">Open official document ↗</a>` : ""}
+    </div>`).join("");
+  if (highlight !== null) { const s = $("src-" + highlight); if (s) s.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+}
+
+/* ============================ ASK ============================ */
+async function ask(text) {
+  text = (text || "").trim();
+  if (!text || ui.busy) return;
+  ui.busy = true; $("sendBtn").disabled = true;
+  const scope = resolveScope(text);
+  addUser(text);
+  $("input").value = ""; autoGrow(); renderScopeLine();
+  addTyping();
+  let answer;
+  try {
+    if (LIVE) {
+      const res = await fetch(API_BASE + "/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          history: ui.history.slice(-8),
+          jurisdiction: { central: true, state: scope.state, mode: ui.mode, detected: scope.how === "detected" }
+        })
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      answer = await res.json();
+    } else {
+      await new Promise((r) => setTimeout(r, 650 + Math.random() * 500));
+      answer = demoAnswer(text, scope);
+    }
+  } catch (err) {
+    answer = { type: "not_found", answer: "The backend did not respond (" + err.message + "). Check that the API server and Ollama are running." };
+  }
+  answer.scope = answer.scope || { state: scope.state };
+  removeTyping();
+  addBot(answer);
+  ui.history.push({ role: "user", content: text }, { role: "assistant", content: answer.answer || "" });
+  ui.busy = false; $("sendBtn").disabled = !$("input").value.trim();
+}
+
+function sendFeedback(a, value) {
+  if (!LIVE) return;
+  fetch(API_BASE + "/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value, answer: a }) }).catch(() => {});
+}
+
+/* ============================ DEMO ENGINE (frontend-only) ============================
+   Placeholder text in [brackets] marks values the real backend must take from documents.
+   ==================================================================================== */
+function demoAnswer(q, scope) {
+  const t = q.toLowerCase();
+  const nums = (t.replace(/,/g, "").match(/\d{3,7}/g) || []).map(Number);
+  const amount = nums.length ? nums[0] : null;
+
+  if (/dubai|uae|usa|singapore|uk\b|london/.test(t)) {
+    return { type: "not_found", answer: "I couldn't find this in my documents. I only cover Indian central and state labour and payroll rules, so I won't guess. Please check that country's official labour-law sources." };
+  }
+  if (/(pf|provident)/.test(t) && amount) {
+    const emp = amount * 0.12, epsBase = Math.min(amount, 15000), eps = epsBase * 0.0833, er = amount * 0.12, epf = er - eps;
+    return {
+      type: "tool", tool: `pf_calculator(basic=${amount})`,
+      answer: `PF split for a basic wage of ${fmtINR(amount)} per month (contributions on actual basic):`,
+      table: { columns: ["Component", "Basis", "Amount"], totalRow: true, rows: [
+        ["Employee PF", "12% of basic", fmtINR(emp)],
+        ["Employer → EPS", `8.33% of ${fmtINR(epsBase)} (wage cap)`, fmtINR(eps)],
+        ["Employer → EPF", "12% minus EPS share", fmtINR(epf)],
+        ["Total to PF", "", fmtINR(emp + er)]
+      ]},
+      note: "Arithmetic is done by Python, not the model. Rates come from the cited circular.",
+      citations: [{ doc: "EPFO contribution-rate circular", section: "[para]", page: "[x]", score: 0.79, snippet: "[Passage: contribution rates for employee and employer, and the pension wage cap]", url: "" }]
+    };
+  }
+  if (/esic|esi\b/.test(t) && /(employee|sample|above|list|which)/.test(t)) {
+    return {
+      type: "sql", rows_scanned: 25,
+      answer: "[N] of 25 sample employees have gross wages above the ESIC ceiling: [E104], [E111], [E117]… ESIC should not be deducted for them.",
+      sql: "SELECT emp_id, name, gross\nFROM employees\nWHERE gross > :esic_ceiling\nORDER BY gross DESC;",
+      note: "Read-only query on synthetic data. The ceiling value is pulled from the ESIC notification."
+    };
+  }
+  if (/esic|esi\b/.test(t)) {
+    return {
+      type: "rag",
+      answer: `${amount ? "For " + fmtINR(amount) + " gross: " : ""}ESIC applies only when gross wages are at or below the notified wage ceiling ([CEILING]). Above it, the employee is outside coverage, unless they were already covered at the start of the current contribution period.`,
+      citations: [
+        { doc: "Code on Social Security, 2020", section: "[chapter on ESI]", page: "[x]", score: 0.86, snippet: "[Passage: definition of employee and coverage under the ESI chapter]", url: "" },
+        { doc: "ESIC wage-ceiling notification", section: "", page: "1", score: 0.81, snippet: "[Passage: notified wage ceiling and effective date]", url: "" }
+      ]
+    };
+  }
+  if (/professional tax|\bpt\b/.test(t)) {
+    return {
+      type: "rag",
+      answer: `Professional Tax is a state levy, so I searched ${stateName(scope.state)} rules. ${amount ? "For a monthly salary of " + fmtINR(amount) + ", " : ""}the applicable slab is [SLAB] → [AMOUNT] per month, deducted by the employer.`,
+      citations: [{ doc: `${stateName(scope.state)} Professional Tax schedule`, section: "Schedule I", page: "[x]", score: 0.83, snippet: "[Passage: monthly salary slabs and tax amounts]", url: "" }]
+    };
+  }
+  if (/gratuity/.test(t)) {
+    return {
+      type: "rag",
+      answer: "Under the Code on Social Security, gratuity for permanent employees still needs [5 years] of continuous service. Fixed-term employees qualify after [1 year]. The amount is [formula] per completed year.\n\nNote: the Payment of Gratuity Act, 1972 has been replaced, so I answered from the Code.",
+      citations: [
+        { doc: "Code on Social Security, 2020", section: "[gratuity chapter]", page: "[x]", score: 0.84, snippet: "[Passage: eligibility for gratuity, incl. fixed-term employees]", url: "" },
+        { doc: "Ministry FAQs on Labour Codes", section: "[FAQ no.]", page: "[x]", score: 0.77, snippet: "[Passage: FAQ on fixed-term gratuity]", url: "" }
+      ]
+    };
+  }
+  if (/bonus/.test(t)) {
+    return {
+      type: "rag",
+      answer: "Bonus is now covered by the Code on Wages. Eligible employees earning up to [WAGE LIMIT] get a minimum of [x]% and a maximum of [y]% of wages, subject to the calculation ceiling.",
+      citations: [{ doc: "Code on Wages, 2019", section: "[bonus chapter]", page: "[x]", score: 0.8, snippet: "[Passage: eligibility and minimum/maximum bonus]", url: "" }]
+    };
+  }
+  return {
+    type: "rag",
+    answer: "Demo mode: this is where the answer from your documents appears. Connect the backend (/api/chat) to get real, cited answers for Central + " + stateName(scope.state) + ".",
+    citations: [{ doc: "Code on Wages, 2019", section: "[section]", page: "[x]", score: 0.62, snippet: "[Most relevant passage]", url: "" }]
+  };
+}
+
+/* ============================ SOURCES: upload + link ============================ */
+$("uploadBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = async (e) => {
+  const files = [...e.target.files]; if (!files.length) return;
+  for (const f of files) {
+    if (LIVE) {
+      const fd = new FormData(); fd.append("file", f); fd.append("scope", resolveScope("").state);
+      try { await fetch(API_BASE + "/api/ingest/file", { method: "POST", body: fd }); } catch (err) {}
+    }
+    DOCS.unshift({ name: f.name.replace(/\.pdf$/i, ""), scope: "central", status: "current", meta: LIVE ? "Indexing…" : "Added (demo, not indexed)" });
+  }
+  renderScopeLine(); toast(`${files.length} file${files.length > 1 ? "s" : ""} added`);
+  e.target.value = "";
+};
+$("linkForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const url = $("linkInput").value.trim(); if (!url) return;
+  if (LIVE) {
+    try { await fetch(API_BASE + "/api/ingest/url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) }); } catch (err) {}
+  }
+  let host = url; try { host = new URL(url).hostname; } catch (err) {}
+  DOCS.unshift({ name: "Linked document", scope: "central", status: "current", meta: host + (LIVE ? " · indexing…" : " · demo") });
+  $("linkInput").value = ""; renderScopeLine(); toast("Link added");
+};
+
+/* ============================ MISC UI ============================ */
+function autoGrow() { const ta = $("input"); ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; }
+$("input").addEventListener("input", () => { autoGrow(); $("sendBtn").disabled = ui.busy || !$("input").value.trim(); renderScopeLine(); });
+$("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask($("input").value); } });
+$("composer").onsubmit = (e) => { e.preventDefault(); ask($("input").value); };
+$("newChat").onclick = () => {
+  ui.history = []; ui.answers = {}; ui.activeId = null; renderWelcome();
+  $("srcList").innerHTML = '<div class="src-empty">No answer selected yet.</div>';
+  $("srcFor").textContent = "Select an answer to see the passages it used.";
+};
+
+function openDrawer(which) { $(which).classList.add("open"); $("scrim").classList.add("show"); }
+function closeDrawers() { ["sidebar", "sources"].forEach((w) => $(w).classList.remove("open")); $("scrim").classList.remove("show"); }
+$("openSidebar").onclick = () => openDrawer("sidebar");
+$("openSources").onclick = () => openDrawer("sources");
+$("scrim").onclick = closeDrawers;
+document.querySelectorAll("[data-close]").forEach((b) => b.onclick = closeDrawers);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawers(); });
+
+let toastTimer;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200); }
+
+async function checkHealth() {
+  try {
+    const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 2500);
+    const r = await fetch(API_BASE + "/api/health", { signal: ctrl.signal });
+    if (!r.ok) throw new Error();
+    const h = await r.json();
+    LIVE = true;
+    $("statusDot").classList.add("on");
+    $("statusText").textContent = (h.model || "LLM") + " · online";
+    $("modeLabel").textContent = "live";
+    try {
+      const d = await fetch(API_BASE + "/api/documents").then((x) => x.json());
+      if (Array.isArray(d) && d.length) { DOCS = d; renderScopeLine(); }
+    } catch (e) {}
+  } catch (e) {
+    LIVE = false;
+    $("statusDot").classList.remove("on");
+    $("statusText").textContent = "Demo mode · backend offline";
+    $("modeLabel").textContent = "demo";
+  }
+}
+
+/* ============================ INIT ============================ */
+initJurisdiction();
+renderChips();
+renderWelcome();
+renderScopeLine();
+checkHealth();
+</script>
+</body>
+</html>
