@@ -57,3 +57,9 @@ The empty screen is now a hero: "Indian payroll law, answered with proof." with 
 One colour was added (none changed): `--accent-2-text` (#865C10) in the light theme. The gold accent is 3.8:1 on cream, below the 4.5:1 that small text needs, so gold *text* uses the darker shade and gold fills keep the original.
 
 **What to learn:** never put model output into `innerHTML` directly. The markdown renderer escapes everything first and only then adds the few tags it creates itself, so a model (or a poisoned document) that writes `<script>` shows up as text. Streaming is mostly a user-experience feature: the answer takes the same time, but seeing it arrive makes the wait feel shorter, and the Stop button gives control back to the user.
+
+## Step 8: evaluation
+
+`eval/questions.csv` has 30 questions: 16 RAG (5 of them follow-ups), 5 calculator, 4 SQL and 5 trick questions that must be refused (Dubai, California, stock tips, GST, IPL). `python -m eval.run --sweep 0.45,0.5,0.55,0.6,0.65` reports route accuracy, retrieval hit@4, answer-contains, not_found precision and recall, and median latency, and writes `eval/report.md`. The sweep re-scores only retrieval for each threshold, so it takes seconds and needs no LLM.
+
+**What to learn:** without an eval, every change to the threshold, chunk size or prompt is a guess. The threshold is a trade-off you can now see: raise it and the trick questions get refused, but some real questions get refused too (precision vs recall). Change one knob, re-run, and keep the numbers in the README; that table is what makes this a portfolio project rather than a demo.
