@@ -63,3 +63,9 @@ One colour was added (none changed): `--accent-2-text` (#865C10) in the light th
 `eval/questions.csv` has 30 questions: 16 RAG (5 of them follow-ups), 5 calculator, 4 SQL and 5 trick questions that must be refused (Dubai, California, stock tips, GST, IPL). `python -m eval.run --sweep 0.45,0.5,0.55,0.6,0.65` reports route accuracy, retrieval hit@4, answer-contains, not_found precision and recall, and median latency, and writes `eval/report.md`. The sweep re-scores only retrieval for each threshold, so it takes seconds and needs no LLM.
 
 **What to learn:** without an eval, every change to the threshold, chunk size or prompt is a guess. The threshold is a trade-off you can now see: raise it and the trick questions get refused, but some real questions get refused too (precision vs recall). Change one knob, re-run, and keep the numbers in the README; that table is what makes this a portfolio project rather than a demo.
+
+## Step 9: README
+
+`README.md` covers the problem, a Mermaid architecture diagram, screenshots of both themes, six PowerShell setup commands, how jurisdiction works, how to add a document, the eval table (to fill after your first run), limitations and future work.
+
+**What to learn:** a README is the interface of a portfolio project. A reviewer decides in a minute whether to read your code, and the architecture diagram plus an honest limitations section usually decide it.
