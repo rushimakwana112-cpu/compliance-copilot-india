@@ -1,17 +1,19 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Compliance Copilot · Cyber Panther</title>
+<meta name="description" content="Indian payroll and labour-law answers with citations to the official documents.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Crect width=%2224%22 height=%2224%22 rx=%226%22 fill=%22%231D57A5%22/%3E%3Cpath d=%22M12 4.5l6 2.4v4.6c0 3.4-2.5 6.3-6 7.2-3.5-.9-6-3.8-6-7.2V6.9z%22 fill=%22none%22 stroke=%22white%22 stroke-width=%221.8%22/%3E%3Cpath d=%22M9.2 12l1.9 1.9 3.6-3.9%22 fill=%22none%22 stroke=%22white%22 stroke-width=%221.8%22 stroke-linecap=%22round%22/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
-   THEME TOKENS
-   dark  = "Cyber Panther": near-black, neon cyan + violet, grid glow
-   light = "Heroic": cream ground, sky blue, deep navy ink, gold accents
+   THEME TOKENS (unchanged from the original design)
+   light = "Heroic": cream ground, sky blue, deep navy ink, gold accents  (default)
+   dark  = "Cyber Panther": near-black, neon cyan + violet
    ============================================================ */
 :root, [data-theme="dark"] {
   --bg: #06080C;
@@ -42,6 +44,7 @@
   --shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
   --radius: 14px;
   --font-display: "Chakra Petch", "Segoe UI", sans-serif;
+  --accent-2-text: var(--accent-2);
   color-scheme: dark;
 }
 [data-theme="light"] {
@@ -71,349 +74,313 @@
   --code-text: #E3EEFF;
   --glow: 0 0 0 1px #1D57A5, 0 6px 20px rgba(29, 87, 165, 0.18);
   --shadow: 0 10px 30px rgba(19, 35, 61, 0.08);
+  /* Added for accessibility: the gold accent is 3.8:1 on cream, below the 4.5:1 needed for small text.
+     This darker gold is used only where gold is text; fills and icons keep --accent-2. */
+  --accent-2-text: #865C10;
   color-scheme: light;
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
 body {
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-  font-size: 15px;
-  line-height: 1.55;
-  color: var(--text);
-  background: var(--bg);
-  transition: background-color .35s ease, color .35s ease;
+  font-size: 15px; line-height: 1.6;
+  color: var(--text); background: var(--bg);
+  transition: background-color .3s ease, color .3s ease;
+  overflow: hidden; /* the app fills the viewport; panels scroll on their own */
 }
-/* Background atmosphere */
-body::before {
-  content: "";
-  position: fixed; inset: 0; z-index: -1; pointer-events: none;
-}
-[data-theme="dark"] body::before {
-  background:
-    radial-gradient(900px 500px at 85% -10%, rgba(167,139,250,.16), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(34,211,238,.12), transparent 60%),
-    linear-gradient(rgba(110,200,255,.05) 1px, transparent 1px) 0 0 / 44px 44px,
-    linear-gradient(90deg, rgba(110,200,255,.05) 1px, transparent 1px) 0 0 / 44px 44px,
-    var(--bg);
-}
-[data-theme="light"] body::before {
-  background:
-    radial-gradient(1000px 420px at 50% -15%, #DCEAFB, transparent 70%),
-    radial-gradient(700px 400px at 100% 100%, rgba(168,117,22,.08), transparent 70%),
-    var(--bg);
-}
-
 a { color: var(--accent); }
-button, input, select { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
 
 /* ============================ LAYOUT ============================ */
-.app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
-.workspace {
-  display: grid;
-  grid-template-columns: 290px minmax(0, 1fr) 320px;
-  min-height: 0;
-}
+.app { display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); height: 100vh; height: 100dvh; }
+.workspace { display: grid; grid-template-columns: 272px minmax(0, 1fr) 320px; min-height: 0; }
+.workspace.no-answers { grid-template-columns: 272px minmax(0, 1fr); }
+.workspace.no-answers .sources { display: none; }
 
 /* ============================ HEADER ============================ */
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-  backdrop-filter: blur(14px);
+  padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--bg);
   position: relative; z-index: 5;
 }
-.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand-mark {
-  width: 42px; height: 42px; flex: none; border-radius: 11px;
-  display: grid; place-items: center;
-  background: var(--accent); color: var(--accent-ink);
-  box-shadow: var(--glow);
+  width: 34px; height: 34px; flex: none; border-radius: 9px;
+  display: grid; place-items: center; background: var(--accent); color: var(--accent-ink);
 }
-.brand-name { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: .02em; line-height: 1.1; }
-.brand-sub { font-size: 12.5px; color: var(--muted); }
-.brand-sub b { color: var(--accent-2); font-weight: 600; }
-.top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.pill {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 6px 12px; border-radius: 999px;
-  background: var(--panel-2); border: 1px solid var(--line);
-  font-size: 12.5px; color: var(--muted); white-space: nowrap;
-}
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
-.dot.on { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+.brand-name { font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: .02em; line-height: 1.1; }
+.brand-sub { font-size: 12px; color: var(--muted); }
+.brand-sub b { color: var(--accent-2-text); font-weight: 600; }
+.top-actions { display: flex; align-items: center; gap: 4px; }
+.status { display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+.dot.on { background: var(--ok); }
 .btn {
-  min-height: 42px; padding: 0 14px; border-radius: 10px;
-  border: 1px solid var(--line-strong); background: var(--panel-solid);
-  display: inline-flex; align-items: center; gap: 8px; font-weight: 500;
-  transition: border-color .2s, box-shadow .2s, transform .1s;
+  min-height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid transparent; background: transparent;
+  display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: var(--text);
+  transition: background .2s, border-color .2s;
 }
-.btn:hover { border-color: var(--accent); box-shadow: var(--glow); }
-.btn:active { transform: translateY(1px); }
-.icon-btn { width: 42px; padding: 0; justify-content: center; }
+.btn:hover { background: var(--accent-soft); }
+.btn.outline { border-color: var(--line-strong); }
+.icon-btn { width: 40px; padding: 0; justify-content: center; }
 .only-mobile { display: none; }
 
 /* ============================ SIDEBAR ============================ */
 .sidebar {
-  border-right: 1px solid var(--line);
-  background: var(--panel);
-  backdrop-filter: blur(14px);
-  overflow-y: auto;
-  padding: 20px 18px;
-  display: flex; flex-direction: column; gap: 22px;
+  border-right: 1px solid var(--line); background: var(--bg); position: relative; /* contains the .sr-only file input */
+  overflow-y: auto; padding: 22px 20px; display: flex; flex-direction: column; gap: 28px;
 }
 .section-title {
-  font-family: var(--font-display);
-  font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--muted); margin: 0 0 10px;
-  display: flex; align-items: center; justify-content: space-between;
+  font-family: var(--font-display); font-size: 11.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 12px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
 }
-.card {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 14px;
-}
-.seg {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px;
-  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px;
-}
+.section-title small { font-family: "IBM Plex Sans", sans-serif; letter-spacing: 0; text-transform: none; font-weight: 400; font-size: 12px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 3px; background: var(--bg-2); border-radius: 10px; }
 .seg button {
-  min-height: 36px; border: 0; border-radius: 7px; background: transparent;
-  color: var(--muted); font-weight: 600; font-size: 13.5px;
-  transition: background .2s, color .2s, box-shadow .2s;
+  min-height: 34px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--muted); font-weight: 600; font-size: 13px; transition: background .2s, color .2s;
 }
-.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: var(--glow); }
-.field { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.seg button[aria-pressed="true"] { background: var(--panel-solid); color: var(--text); box-shadow: 0 0 0 1px var(--line-strong); }
+.field { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
 .field label { font-size: 12.5px; color: var(--muted); }
 select {
-  min-height: 42px; padding: 0 12px; border-radius: 10px;
+  min-height: 40px; padding: 0 10px; border-radius: 10px;
   background: var(--panel-solid); border: 1px solid var(--line-strong);
 }
-select:disabled { opacity: .55; }
-.lock-chip {
-  margin-top: 12px; display: flex; align-items: center; gap: 8px;
-  font-size: 13px; padding: 8px 10px; border-radius: 8px;
-  background: var(--accent-soft); color: var(--text);
-}
-.hint { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; }
+.hint { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; display: flex; gap: 8px; align-items: flex-start; }
+.hint svg { flex: none; margin-top: 3px; }
 
-.doc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.doc-list li {
-  display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: start;
-  padding: 9px 8px; border-radius: 8px; transition: background .2s;
-}
-.doc-list li:hover { background: var(--accent-soft); }
-.doc-list li.dim { opacity: .45; }
-.doc-name { font-size: 13.5px; font-weight: 500; line-height: 1.3; }
+.doc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.doc-list li { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.doc-list li:last-child { border-bottom: 0; }
+.doc-list li.dim { opacity: .5; }
+.doc-name { font-size: 13.5px; font-weight: 500; line-height: 1.35; }
 .doc-meta { font-size: 12px; color: var(--muted); }
 .tag {
   font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
-  padding: 2px 7px; border-radius: 999px; white-space: nowrap;
-  background: var(--accent-soft); color: var(--accent);
+  padding: 1px 7px; border-radius: 999px; white-space: nowrap; background: var(--accent-soft); color: var(--accent);
 }
-.tag.state { background: var(--accent-2-soft); color: var(--accent-2); }
+.tag.state { background: var(--accent-2-soft); color: var(--accent-2-text); }
 .tag.old { background: var(--warn-bg); color: var(--warn); }
 
 .add-source { display: flex; flex-direction: column; gap: 8px; }
 .dropzone {
-  border: 1.5px dashed var(--line-strong); border-radius: 10px;
-  min-height: 46px; display: flex; align-items: center; justify-content: center; gap: 8px;
-  background: transparent; font-weight: 500; font-size: 13.5px; width: 100%;
+  border: 1px dashed var(--line-strong); border-radius: 10px; min-height: 42px; width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 8px; background: transparent; font-weight: 500; font-size: 13.5px;
 }
-.dropzone:hover { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone:hover { border-color: var(--accent); color: var(--accent); }
 .link-row { display: flex; gap: 6px; }
 .link-row input {
-  flex: 1; min-width: 0; min-height: 42px; padding: 0 10px; border-radius: 10px;
+  flex: 1; min-width: 0; min-height: 40px; padding: 0 10px; border-radius: 10px;
   background: var(--panel-solid); border: 1px solid var(--line-strong); font-size: 13px;
 }
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 12.5px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; margin: 0; }
 .kv dt { color: var(--muted); }
-.kv dd { margin: 0; text-align: right; font-family: "JetBrains Mono", monospace; font-size: 12px; }
+.kv dd { margin: 0; text-align: right; font-family: "JetBrains Mono", monospace; font-size: 12px; overflow-wrap: anywhere; }
 
 /* ============================ CHAT ============================ */
-.chat { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.chat { display: flex; flex-direction: column; min-height: 0; min-width: 0; position: relative; }
 .messages { flex: 1; overflow-y: auto; padding: 28px 24px 12px; scroll-behavior: smooth; }
-.thread { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.thread { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 26px; }
 
-.welcome { text-align: center; padding: 36px 8px 8px; }
-.welcome h1 {
-  font-family: var(--font-display); font-weight: 700; font-size: clamp(26px, 4vw, 38px);
-  line-height: 1.15; margin: 0 0 10px; letter-spacing: .01em;
+.notice {
+  max-width: 760px; margin: 12px auto 0; width: calc(100% - 48px);
+  font-size: 13px; padding: 8px 12px; border-radius: 10px; background: var(--warn-bg); color: var(--text);
+  border-left: 3px solid var(--warn); display: none;
 }
-.welcome h1 span { color: var(--accent); }
-[data-theme="dark"] .welcome h1 span { text-shadow: 0 0 22px rgba(34,211,238,.45); }
-.welcome p { color: var(--muted); margin: 0 auto 22px; max-width: 520px; }
-.starter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; text-align: left; }
+.notice.show { display: block; }
+
+/* Hero: the empty state. The composer sits directly under it, centred. */
+.chat.is-empty { justify-content: center; }
+.chat.is-empty .messages { flex: 0 0 auto; overflow: visible; padding-top: 0; }
+.chat.is-empty .composer-wrap { border-top: 0; padding-top: 4px; }
+.chat.is-empty .chips, .chat.is-empty .disclaimer { display: none; }
+.hero { text-align: center; padding: 0 4px; }
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px;
+  font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--accent-2-text);
+}
+.eyebrow::before, .eyebrow::after { content: ""; width: 22px; height: 1px; background: currentColor; opacity: .6; }
+.hero h1 {
+  font-family: var(--font-display); font-weight: 700; font-size: clamp(32px, 5.4vw, 58px);
+  line-height: 1.04; margin: 0 0 16px; letter-spacing: -.005em;
+}
+.hero h1 span { color: var(--accent); }
+.hero p { color: var(--muted); margin: 0 auto 6px; max-width: 540px; font-size: 16px; }
+
+.starters { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 8px; max-width: 760px; margin: 14px auto 0; padding: 0 24px; }
 .starter {
-  padding: 14px; border-radius: 12px; border: 1px solid var(--line);
-  background: var(--panel); display: flex; flex-direction: column; gap: 4px;
-  transition: border-color .2s, box-shadow .2s, transform .2s;
+  min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line-strong);
+  background: transparent; font-size: 13.5px; color: var(--text); display: inline-flex; align-items: center; gap: 6px;
 }
-.starter:hover { border-color: var(--accent); box-shadow: var(--glow); transform: translateY(-2px); }
-.starter b { font-size: 14px; }
-.starter span { font-size: 12.5px; color: var(--muted); }
+.starter b { font-weight: 600; color: var(--muted); font-size: 12px; letter-spacing: .02em; }
+.starter:hover { border-color: var(--accent); color: var(--accent); }
+.trust { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 22px; margin: 22px auto 0; padding: 0 24px; font-size: 12.5px; color: var(--muted); }
+.trust span { display: inline-flex; align-items: center; gap: 6px; }
+.trust svg { color: var(--accent-2); }
 
-.msg { animation: rise .35s ease both; }
-@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* Messages */
+.msg { animation: rise .3s ease both; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .msg.user {
-  align-self: flex-end; max-width: 82%;
-  padding: 11px 16px; border-radius: 16px 16px 4px 16px;
+  align-self: flex-end; max-width: 82%; padding: 9px 15px; border-radius: 16px 16px 4px 16px;
   background: var(--user-bg); border: 1px solid var(--user-line); color: var(--user-text);
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .msg.bot {
-  background: var(--panel); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 16px 18px;
-  display: flex; flex-direction: column; gap: 12px;
-  box-shadow: var(--shadow);
-  transition: border-color .2s, box-shadow .2s;
+  display: flex; flex-direction: column; gap: 12px; padding: 2px 0 2px 18px;
+  border-left: 2px solid var(--line); transition: border-color .2s;
 }
-.msg.bot.active { border-color: var(--accent); box-shadow: var(--glow); }
-.msg.bot.notfound { background: var(--warn-bg); border-color: var(--warn-line); }
+.msg.bot.active { border-left-color: var(--accent); }
+.msg.bot.notfound { border-left-color: var(--warn); }
 .meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-.badge {
-  font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
-  padding: 3px 9px; border-radius: 999px;
-}
+.badge { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
 .badge.rag { background: var(--accent-soft); color: var(--accent); }
-.badge.tool { background: var(--accent-2-soft); color: var(--accent-2); }
+.badge.tool { background: var(--accent-2-soft); color: var(--accent-2-text); }
 .badge.sql { background: var(--accent-soft); color: var(--sql); }
-.badge.nf { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-line); }
-.scope-chip { display: inline-flex; gap: 6px; align-items: center; }
-.answer p { margin: 0 0 8px; }
-.answer p:last-child { margin: 0; }
-.cites { display: flex; flex-wrap: wrap; gap: 8px; }
-.cite {
-  min-height: 34px; padding: 0 12px; border-radius: 8px; font-size: 12.5px;
-  border: 1px solid var(--line-strong); background: var(--panel-2);
-  transition: border-color .2s, background .2s;
+.badge.nf { background: var(--warn-bg); color: var(--warn); }
+.answer { overflow-wrap: anywhere; }
+.answer p { margin: 0 0 10px; }
+.answer > :last-child { margin-bottom: 0; }
+.answer ul, .answer ol { margin: 0 0 10px; padding-left: 22px; }
+.answer li { margin: 2px 0; }
+.answer code { font-family: "JetBrains Mono", monospace; font-size: .9em; background: var(--bg-2); padding: 1px 5px; border-radius: 5px; }
+.cite-ref {
+  border: 0; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 600;
+  padding: 0 5px; margin: 0 1px; border-radius: 5px; vertical-align: 1px; line-height: 1.5;
 }
-.cite:hover, .cite[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 420px; font-variant-numeric: tabular-nums; }
-th { text-align: left; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line-strong); }
-td { padding: 9px 0; border-bottom: 1px solid var(--line); }
-td.num, th.num { text-align: right; }
+.cite-ref:hover, .cite-ref[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.cursor { display: inline-block; width: 7px; height: 1em; background: var(--accent); vertical-align: -2px; margin-left: 2px; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.cites { display: flex; flex-wrap: wrap; gap: 6px; }
+.cite {
+  min-height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12.5px; text-align: left;
+  border: 1px solid var(--line); background: transparent; color: var(--muted); max-width: 100%;
+}
+.cite:hover, .cite[aria-pressed="true"] { border-color: var(--accent); color: var(--text); }
+.table-wrap { overflow-x: auto; max-width: 100%; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.answer table { margin: 0 0 10px; }
+th { text-align: left; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num, th.num { text-align: right; padding-right: 0; }
 tr.total td { font-weight: 600; border-bottom: 0; color: var(--accent); }
 pre.code {
-  margin: 0; padding: 12px 14px; border-radius: 10px;
-  background: var(--code-bg); color: var(--code-text);
-  font-family: "JetBrains Mono", monospace; font-size: 13px; overflow-x: auto;
-  border: 1px solid var(--line);
+  margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--code-bg); color: var(--code-text);
+  font-family: "JetBrains Mono", monospace; font-size: 13px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .note { font-size: 12.5px; color: var(--muted); }
-.feedback { display: flex; gap: 6px; }
-.feedback button {
-  width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line);
-  background: transparent; display: grid; place-items: center; color: var(--muted);
+.foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+.actions { display: flex; gap: 2px; }
+.actions button {
+  width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent;
+  display: grid; place-items: center; color: var(--muted);
 }
-.feedback button:hover, .feedback button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
-
+.actions button:hover, .actions button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 .typing { display: inline-flex; gap: 5px; padding: 4px 0; }
-.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: blink 1.2s infinite ease-in-out; }
+.typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s infinite ease-in-out; }
 .typing i:nth-child(2) { animation-delay: .15s; }
 .typing i:nth-child(3) { animation-delay: .3s; }
-@keyframes blink { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
+@keyframes pulse { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
 
 /* Composer */
-.composer-wrap { padding: 10px 24px 18px; border-top: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(14px); }
-.composer { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
-.scope-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.composer-wrap { padding: 10px 24px 16px; border-top: 1px solid var(--line); background: var(--bg); }
+.composer { position: relative; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.scope-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
 .scope-line strong { color: var(--text); font-weight: 600; }
 .scope-line .why { font-style: italic; }
-.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
 .chip {
-  flex: none; min-height: 34px; padding: 0 12px; border-radius: 999px;
-  border: 1px solid var(--line-strong); background: var(--panel-solid); font-size: 13px; color: var(--muted);
+  flex: none; min-height: 32px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: transparent; font-size: 13px; color: var(--muted);
 }
 .chip:hover { color: var(--text); border-color: var(--accent); }
 .input-row {
   display: flex; gap: 8px; align-items: flex-end; padding: 6px;
-  border-radius: 14px; background: var(--panel-solid); border: 1px solid var(--line-strong);
-  transition: border-color .2s, box-shadow .2s;
+  border-radius: 14px; background: var(--panel-solid); border: 1px solid var(--line-strong); transition: border-color .2s;
 }
-.input-row:focus-within { border-color: var(--accent); box-shadow: var(--glow); }
+.chat.is-empty .input-row { padding: 8px; border-radius: 16px; }
+.input-row:focus-within { border-color: var(--accent); }
 .input-row textarea {
   flex: 1; min-width: 0; resize: none; border: 0; outline: none; background: transparent;
-  font: inherit; color: var(--text); padding: 10px; max-height: 160px; min-height: 44px;
+  color: var(--text); padding: 10px; max-height: 160px; min-height: 44px;
 }
 .send {
-  width: 46px; height: 46px; flex: none; border-radius: 10px; border: 0;
-  background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
-  box-shadow: var(--glow); transition: transform .1s, opacity .2s;
+  width: 44px; height: 44px; flex: none; border-radius: 10px; border: 0;
+  background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; transition: opacity .2s;
 }
-.send:disabled { opacity: .45; box-shadow: none; cursor: not-allowed; }
-.send:not(:disabled):active { transform: scale(.96); }
+.send:disabled { opacity: .4; cursor: not-allowed; }
+.send.stop { background: var(--text); color: var(--bg); }
 .disclaimer { font-size: 12px; color: var(--muted); text-align: center; }
 
 /* ============================ SOURCES ============================ */
 .sources {
-  border-left: 1px solid var(--line);
-  background: var(--panel);
-  backdrop-filter: blur(14px);
-  overflow-y: auto; padding: 20px 18px;
-  display: flex; flex-direction: column; gap: 12px;
+  border-left: 1px solid var(--line); background: var(--bg);
+  overflow-y: auto; padding: 22px 20px; display: flex; flex-direction: column; gap: 14px;
 }
-.src-empty { font-size: 13px; color: var(--muted); padding: 14px; border: 1px dashed var(--line-strong); border-radius: 12px; }
-.src {
-  border: 1px solid var(--line); border-radius: 12px; padding: 13px;
-  background: var(--panel-2); display: flex; flex-direction: column; gap: 8px;
-  animation: rise .3s ease both;
-}
-.src.hl { border-color: var(--accent); box-shadow: var(--glow); }
+.src-empty { font-size: 13px; color: var(--muted); }
+.src { display: flex; flex-direction: column; gap: 6px; padding: 0 0 14px; border-bottom: 1px solid var(--line); animation: rise .3s ease both; }
+.src:last-child { border-bottom: 0; }
+.src.hl .src-head b { color: var(--accent); }
+.src.hl .src-snippet { border-left-color: var(--accent); }
 .src-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
 .src-head b { font-weight: 600; }
 .src-snippet { font-size: 13px; color: var(--muted); border-left: 2px solid var(--accent-2); padding-left: 10px; }
 .score { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-.bar { flex: 1; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .6s ease; }
+.bar { flex: 1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); transition: width .6s ease; }
 .src a { font-size: 12.5px; }
 
 /* Toast */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
-  background: var(--panel-solid); border: 1px solid var(--accent); color: var(--text);
-  padding: 10px 16px; border-radius: 10px; box-shadow: var(--glow);
-  opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 50; font-size: 14px;
+  background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 10px;
+  opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 50; font-size: 14px; max-width: calc(100vw - 32px);
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* ============================ RESPONSIVE ============================ */
 @media (max-width: 1180px) {
-  .workspace { grid-template-columns: 270px minmax(0, 1fr); }
+  .workspace, .workspace.no-answers { grid-template-columns: 260px minmax(0, 1fr); }
   .sources {
     position: fixed; right: 0; top: 0; bottom: 0; width: min(360px, 92vw); z-index: 30;
-    transform: translateX(100%); transition: transform .3s ease; box-shadow: var(--shadow);
-    background: var(--panel-solid);
+    transform: translateX(100%); transition: transform .3s ease; box-shadow: var(--shadow); background: var(--panel-solid);
   }
   .sources.open { transform: none; }
+  .workspace.no-answers .sources { display: flex; }
   .only-sources { display: inline-flex; }
 }
 @media (min-width: 1181px) { .only-sources { display: none; } }
 @media (max-width: 820px) {
-  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .workspace, .workspace.no-answers { grid-template-columns: minmax(0, 1fr); }
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; width: min(320px, 92vw); z-index: 30;
-    transform: translateX(-100%); transition: transform .3s ease; box-shadow: var(--shadow);
-    background: var(--panel-solid);
+    transform: translateX(-100%); transition: transform .3s ease; box-shadow: var(--shadow); background: var(--panel-solid);
   }
   .sidebar.open { transform: none; }
   .only-mobile { display: inline-flex; }
-  .brand-sub, .pill.hide-sm, .hide-sm-label { display: none; }
-  #newChat { width: 42px; padding: 0; justify-content: center; }
-  .brand-name { font-size: 18px; }
+  .brand-sub, .brand-mark, .status, .hide-sm-label { display: none; }
+  .brand-name { font-size: 16px; white-space: nowrap; }
+  .top-actions { gap: 0; }
+  .icon-btn, #newChat { width: 36px; min-height: 36px; padding: 0; justify-content: center; }
+  .brand { gap: 4px; }
+  .topbar { padding: 8px 12px; }
   .messages { padding: 18px 16px 8px; }
-  .composer-wrap { padding: 10px 16px 14px; }
-  .starter-grid { grid-template-columns: 1fr; }
-  .topbar { padding: 10px 16px; }
+  .composer-wrap { padding: 8px 16px 12px; }
+  .starters, .trust { padding: 0 16px; }
+  .notice { width: calc(100% - 32px); }
+  .hero p { font-size: 15px; }
+  .msg.bot { padding-left: 12px; }
+  .starters { flex-direction: column; align-items: stretch; }
+  .starter { justify-content: flex-start; text-align: left; padding: 8px 14px; border-radius: 12px; }
+  .starter b { min-width: 74px; }
 }
-.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 25; display: none; }
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 25; display: none; }
 .scrim.show { display: block; }
 .drawer-close { display: none; }
 @media (max-width: 1180px) { .sources .drawer-close { display: inline-flex; } }
@@ -430,12 +397,11 @@ pre.code {
   <!-- ======================= HEADER ======================= -->
   <header class="topbar">
     <div class="brand">
-      <button class="btn icon-btn only-mobile" id="openSidebar" aria-label="Open filters and documents" aria-controls="sidebar">
+      <button class="btn icon-btn only-mobile" id="openSidebar" aria-label="Open jurisdiction and documents" aria-controls="sidebar">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
       </button>
       <div class="brand-mark" aria-hidden="true">
-        <!-- Abstract geometric mark: shield + check -->
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l8 3.2v6.1c0 4.6-3.4 8.5-8 9.7-4.6-1.2-8-5.1-8-9.7V5.7z"/><path d="M8.3 12.2l2.6 2.6 4.8-5.2"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l8 3.2v6.1c0 4.6-3.4 8.5-8 9.7-4.6-1.2-8-5.1-8-9.7V5.7z"/><path d="M8.3 12.2l2.6 2.6 4.8-5.2"/></svg>
       </div>
       <div>
         <div class="brand-name">Compliance Copilot</div>
@@ -443,62 +409,62 @@ pre.code {
       </div>
     </div>
     <div class="top-actions">
-      <span class="pill hide-sm" id="statusPill" title="Backend status"><span class="dot" id="statusDot"></span><span id="statusText">Checking…</span></span>
+      <span class="status" id="statusPill" title="Backend status"><span class="dot" id="statusDot"></span><span class="status-text" id="statusText">Checking…</span></span>
+      <button class="btn icon-btn" id="exportChat" aria-label="Export chat as Markdown" title="Export chat (.md)">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+      </button>
       <button class="btn icon-btn only-sources" id="openSources" aria-label="Show sources" aria-controls="sources">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h11a3 3 0 0 1 3 3v11H7a3 3 0 0 1-3-3z"/><path d="M8 9h6M8 13h6"/></svg>
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h11a3 3 0 0 1 3 3v11H7a3 3 0 0 1-3-3z"/><path d="M8 9h6M8 13h6"/></svg>
       </button>
-      <button class="btn icon-btn" id="themeToggle" aria-label="Switch to light mode">
-        <svg id="themeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+      <button class="btn icon-btn" id="themeToggle" aria-label="Switch to dark mode">
+        <svg id="themeIcon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
       </button>
-      <button class="btn" id="newChat" aria-label="New chat">
+      <button class="btn outline" id="newChat" aria-label="New chat">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         <span class="hide-sm-label">New chat</span>
       </button>
     </div>
   </header>
 
-  <div class="workspace">
+  <div class="workspace no-answers" id="workspace">
 
     <!-- ======================= LEFT SIDEBAR ======================= -->
     <aside class="sidebar" id="sidebar" aria-label="Jurisdiction and knowledge base">
-      <button class="btn drawer-close" data-close="sidebar" aria-label="Close panel" style="align-self:flex-end">Close</button>
+      <button class="btn outline drawer-close" data-close="sidebar" aria-label="Close panel" style="align-self:flex-end">Close</button>
 
       <section>
         <h2 class="section-title">Jurisdiction</h2>
-        <div class="card">
-          <div class="seg" role="group" aria-label="State selection mode">
-            <button type="button" id="modeAuto" aria-pressed="true">Auto-detect</button>
-            <button type="button" id="modeManual" aria-pressed="false">Manual</button>
-          </div>
-          <div class="field">
-            <label for="stateSelect" id="stateLabel">Default state (used when none is detected)</label>
-            <select id="stateSelect"></select>
-          </div>
-          <div class="lock-chip">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-            Central law is always included
-          </div>
-          <p class="hint" id="modeHint">Auto-detect reads state or city names in your question (e.g. "Ahmedabad" → Gujarat).</p>
+        <div class="seg" role="group" aria-label="State selection mode">
+          <button type="button" id="modeAuto" aria-pressed="true">Auto-detect</button>
+          <button type="button" id="modeManual" aria-pressed="false">Manual</button>
         </div>
+        <div class="field">
+          <label for="stateSelect" id="stateLabel">Default state (used when none is detected)</label>
+          <select id="stateSelect"></select>
+        </div>
+        <p class="hint">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          <span>Central law is always included. <span id="modeHint">Auto-detect reads state or city names in your question (e.g. “Ahmedabad” → Gujarat).</span></span>
+        </p>
       </section>
 
       <section>
-        <h2 class="section-title">Knowledge base <span id="docCount" style="letter-spacing:0;text-transform:none;font-family:'IBM Plex Sans',sans-serif"></span></h2>
+        <h2 class="section-title">Knowledge base <small id="docCount"></small></h2>
         <ul class="doc-list" id="docList"></ul>
       </section>
 
       <section>
         <h2 class="section-title">Add a source</h2>
         <div class="add-source">
-          <input type="file" id="fileInput" accept="application/pdf" class="sr-only" multiple>
+          <input type="file" id="fileInput" accept="application/pdf" class="sr-only" multiple tabindex="-1">
           <button type="button" class="dropzone" id="uploadBtn">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
             Upload a circular (PDF)
           </button>
           <form class="link-row" id="linkForm">
             <label for="linkInput" class="sr-only">Paste an official document link</label>
-            <input id="linkInput" type="url" placeholder="Paste official link (.gov.in)…" required>
-            <button class="btn" type="submit">Add</button>
+            <input id="linkInput" type="url" placeholder="Paste official link (https://…gov.in)" required>
+            <button class="btn outline" type="submit">Add</button>
           </form>
         </div>
       </section>
@@ -506,7 +472,7 @@ pre.code {
       <section style="margin-top:auto">
         <h2 class="section-title">Pipeline</h2>
         <dl class="kv">
-          <dt>LLM</dt><dd>Ollama · qwen2.5:7b</dd>
+          <dt>LLM</dt><dd id="kvModel">Ollama · qwen2.5:7b</dd>
           <dt>Embeddings</dt><dd>bge-m3</dd>
           <dt>Vector DB</dt><dd>Pinecone</dd>
           <dt>Data</dt><dd>sample_payroll.db</dd>
@@ -516,7 +482,8 @@ pre.code {
     </aside>
 
     <!-- ======================= CHAT ======================= -->
-    <main class="chat">
+    <main class="chat is-empty" id="chat">
+      <div class="notice" id="notice" role="status"></div>
       <div class="messages" id="messages" aria-live="polite">
         <div class="thread" id="thread"></div>
       </div>
@@ -528,24 +495,23 @@ pre.code {
           <div class="input-row">
             <label for="input" class="sr-only">Ask a compliance question</label>
             <textarea id="input" rows="1" placeholder="Ask about PF, ESIC, wages, bonus, gratuity, PT, TDS…"></textarea>
-            <button class="send" id="sendBtn" type="submit" aria-label="Send" disabled>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-            </button>
+            <button class="send" id="sendBtn" type="submit" aria-label="Send" disabled></button>
           </div>
-          <div class="disclaimer">For reference only. Always confirm against the cited official document.</div>
+          <div class="disclaimer">For reference only, not legal advice. Always confirm against the cited official document.</div>
         </form>
       </div>
+      <div id="heroExtras"></div>
     </main>
 
     <!-- ======================= SOURCES ======================= -->
     <aside class="sources" id="sources" aria-label="Sources for the selected answer">
-      <button class="btn drawer-close" data-close="sources" aria-label="Close sources" style="align-self:flex-end">Close</button>
+      <button class="btn outline drawer-close" data-close="sources" aria-label="Close sources" style="align-self:flex-end">Close</button>
       <div>
         <h2 class="section-title" style="margin-bottom:2px">Sources</h2>
         <div class="note" id="srcFor">Select an answer to see the passages it used.</div>
       </div>
       <div id="srcList"><div class="src-empty">No answer selected yet.</div></div>
-      <div class="note">Score = similarity from Pinecone. Below the threshold the bot answers "Not in my documents".</div>
+      <div class="note">Score = similarity from Pinecone. Below the threshold the copilot answers “Not in my documents”.</div>
     </aside>
   </div>
 </div>
@@ -555,13 +521,14 @@ pre.code {
 
 <script>
 /* ==================================================================
-   CONFIG — change API_BASE when the backend is running.
-   If the backend is unreachable the UI falls back to DEMO mode.
+   CONFIG. Served by FastAPI, the API is on the same origin.
+   If /api/health doesn't answer, the UI runs in DEMO mode.
    ================================================================== */
-const API_BASE = "";              // same origin when served by FastAPI, e.g. "" or "http://localhost:8000"
-let LIVE = false;                 // set true automatically if /api/health answers
+const API_BASE = "";   // e.g. "http://localhost:8000" when opening this file directly
+let LIVE = false;
 
-const STATES = [
+// Fallback list; replaced by GET /api/states when the backend is up.
+let STATES = [
   { id: "gujarat", name: "Gujarat", aliases: ["gujarat", "ahmedabad", "surat", "vadodara", "baroda", "rajkot", "gandhinagar"] },
   { id: "maharashtra", name: "Maharashtra", aliases: ["maharashtra", "mumbai", "pune", "nagpur", "nashik", "thane"] },
   { id: "karnataka", name: "Karnataka", aliases: ["karnataka", "bengaluru", "bangalore", "mysuru", "mysore"] },
@@ -574,7 +541,7 @@ const STATES = [
   { id: "west-bengal", name: "West Bengal", aliases: ["west bengal", "kolkata"] }
 ];
 
-// Demo knowledge base — replace with GET /api/documents
+// Demo knowledge base; replaced by GET /api/documents when live.
 let DOCS = [
   { name: "Code on Wages, 2019", scope: "central", status: "current", meta: "In force 21 Nov 2025" },
   { name: "Code on Social Security, 2020", scope: "central", status: "current", meta: "In force 21 Nov 2025" },
@@ -594,15 +561,16 @@ const SUGGESTIONS = [
   "Professional tax for ₹15,000 salary in Ahmedabad",
   "Which sample employees are above the ESIC limit?",
   "Gratuity rule for fixed-term employees",
+  "Compare Gujarat and Maharashtra PT",
   "Gratuity rule in Dubai?"
 ];
-
 const STARTERS = [
-  { t: "Check applicability", s: "Is ESIC applicable on ₹24,000 gross?" },
-  { t: "Run a calculation", s: "Calculate PF for basic ₹18,000" },
-  { t: "State-specific rule", s: "Professional tax for ₹15,000 salary in Ahmedabad" },
-  { t: "Query sample data", s: "Which sample employees are above the ESIC limit?" }
+  { t: "Check", s: "Is ESIC applicable on ₹24,000 gross?" },
+  { t: "Calculate", s: "Calculate PF for basic ₹18,000" },
+  { t: "State rule", s: "Professional tax for ₹15,000 salary in Ahmedabad" },
+  { t: "Sample data", s: "Which sample employees are above the ESIC limit?" }
 ];
+const ROUTE_LABEL = { rag: "RAG", tool: "Tool", sql: "SQL", not_found: "Not found" };
 
 /* ============================ STATE ============================ */
 const store = {
@@ -612,16 +580,27 @@ const store = {
 const ui = {
   mode: store.get("cc-mode", "auto"),        // "auto" | "manual"
   defaultState: store.get("cc-state", "gujarat"),
-  history: [],                                // [{role, content}]
+  history: [],                                // [{role, content}] sent to the API
+  transcript: [],                             // [{q, a}] for export
   answers: {},                                // id -> answer payload
   activeId: null,
-  busy: false
+  busy: false,
+  controller: null                            // AbortController of the running request
 };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtINR = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
 const stateName = (id) => (STATES.find((s) => s.id === id) || {}).name || id;
+const scopeLabel = (sc) => ["Central", ...((sc && (sc.states || [sc.state])) || []).map(stateName)].join(" + ");
+const ICON = {
+  send: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  stop: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+  copy: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>',
+  up: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v9H4v-9zM7 11l4-8a2 2 0 0 1 2 2v4h6a2 2 0 0 1 2 2.3l-1.3 7A2 2 0 0 1 17.7 20H7"/></svg>',
+  down: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 13V4h3v9zM17 13l-4 8a2 2 0 0 1-2-2v-4H5a2 2 0 0 1-2-2.3l1.3-7A2 2 0 0 1 6.3 4H17"/></svg>',
+  check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
+};
 
 /* ============================ THEME ============================ */
 const SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
@@ -632,47 +611,49 @@ function applyTheme(t) {
   $("themeToggle").setAttribute("aria-label", t === "dark" ? "Switch to light mode" : "Switch to dark mode");
   store.set("cc-theme", t);
 }
-(function initTheme() {
-  let t = store.get("cc-theme", null);
-  if (!t) t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-  applyTheme(t);
-})();
+// The "Heroic" light theme is the default look; a saved choice wins.
+applyTheme(store.get("cc-theme", "light"));
 $("themeToggle").addEventListener("click", () => {
   applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
 });
 
 /* ============================ JURISDICTION ============================ */
-function detectState(text) {
-  const q = " " + text.toLowerCase() + " ";
-  for (const s of STATES) {
-    for (const a of s.aliases) {
-      if (q.includes(" " + a + " ") || q.includes(" " + a + "?") || q.includes(" " + a + ",") || q.includes(" " + a + ".")) {
-        return { id: s.id, match: a };
-      }
-    }
+function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+// Same rules as app/jurisdiction.py: whole words, longest alias first, order of appearance.
+function detectStates(text) {
+  const all = STATES.flatMap((s) => s.aliases.map((a) => ({ id: s.id, a })));
+  all.sort((x, y) => y.a.length - x.a.length);
+  const re = new RegExp("\\b(" + all.map((x) => escRe(x.a)).join("|") + ")\\b", "gi");
+  const found = [];
+  for (const m of (text || "").matchAll(re)) {
+    const hit = all.find((x) => x.a === m[1].toLowerCase());
+    if (hit && !found.some((f) => f.id === hit.id)) found.push({ id: hit.id, match: hit.a });
   }
-  return null;
+  return found.slice(0, 3);
 }
 function resolveScope(text) {
-  if (ui.mode === "manual") return { state: ui.defaultState, how: "manual", match: null };
-  const d = detectState(text || "");
-  if (d) return { state: d.id, how: "detected", match: d.match };
-  return { state: ui.defaultState, how: "default", match: null };
+  if (ui.mode === "manual") return { state: ui.defaultState, states: [ui.defaultState], how: "manual", match: null };
+  const d = detectStates(text || "");
+  if (d.length) return { state: d[0].id, states: d.map((x) => x.id), how: "detected", match: d.map((x) => x.match).join("”, “") };
+  return { state: ui.defaultState, states: [ui.defaultState], how: "default", match: null };
 }
 function renderScopeLine() {
   const r = resolveScope($("input").value);
-  let why = "";
-  if (r.how === "detected") why = `<span class="why">auto-detected from “${esc(r.match)}”</span>`;
-  else if (r.how === "default") why = `<span class="why">default state · mention a state or city to switch</span>`;
-  else why = `<span class="why">manual selection</span>`;
+  const why = r.how === "detected" ? `<span class="why">auto-detected from “${esc(r.match)}”</span>`
+            : r.how === "default" ? `<span class="why">default state · mention a state or city to switch</span>`
+            : `<span class="why">manual selection</span>`;
   $("scopeLine").innerHTML =
     `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-     Searching <strong>Central + ${esc(stateName(r.state))}</strong> ${why}`;
-  renderDocs(r.state);
+     Searching <strong>${esc(scopeLabel(r))}</strong> ${why}`;
+  renderDocs(r.states);
+}
+function fillStateSelect() {
+  $("stateSelect").innerHTML = STATES.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
+  if (!STATES.some((s) => s.id === ui.defaultState)) ui.defaultState = STATES[0].id;
+  $("stateSelect").value = ui.defaultState;
 }
 function initJurisdiction() {
-  $("stateSelect").innerHTML = STATES.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
-  $("stateSelect").value = ui.defaultState;
+  fillStateSelect();
   const setMode = (m) => {
     ui.mode = m; store.set("cc-mode", m);
     $("modeAuto").setAttribute("aria-pressed", m === "auto");
@@ -690,58 +671,122 @@ function initJurisdiction() {
 }
 
 /* ============================ KNOWLEDGE BASE ============================ */
-function renderDocs(activeState) {
-  const docIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-top:2px;color:var(--muted)"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
+function renderDocs(activeStates) {
+  const inScopeOf = (d) => d.scope === "central" || activeStates.includes(d.scope);
   $("docList").innerHTML = DOCS.map((d) => {
-    const inScope = d.scope === "central" || d.scope === activeState;
-    const dim = !inScope || d.status !== "current";
+    const dim = !inScopeOf(d) || d.status !== "current";
     const tag = d.status !== "current"
       ? `<span class="tag old">${esc(d.status)}</span>`
       : `<span class="tag ${d.scope === "central" ? "" : "state"}">${esc(d.scope === "central" ? "Central" : stateName(d.scope))}</span>`;
-    return `<li class="${dim ? "dim" : ""}" title="${dim ? "Not searched for this question" : "Searched"}">${docIcon}
+    return `<li class="${dim ? "dim" : ""}" title="${dim ? "Not searched for this question" : "Searched"}">
       <div><div class="doc-name">${esc(d.name)}</div><div class="doc-meta">${esc(d.meta)}</div></div>${tag}</li>`;
   }).join("");
-  const n = DOCS.filter((d) => (d.scope === "central" || d.scope === activeState) && d.status === "current").length;
+  const n = DOCS.filter((d) => inScopeOf(d) && d.status === "current").length;
   $("docCount").textContent = `${n} of ${DOCS.length} in scope`;
 }
 
+/* ============================ SAFE MARKDOWN ============================
+   Model output is escaped FIRST; only tags created here are ever inserted.
+   Supports paragraphs, **bold**, `code`, - / 1. lists, | tables |, and [n] citations.
+   ===================================================================== */
+function inlineMd(s, nCites) {
+  let h = esc(s);
+  h = h.replace(/`([^`]+)`/g, "<code>$1</code>");
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (m, nums) => {
+    const ok = nums.split(",").map((x) => Number(x.trim())).filter((n) => n >= 1 && n <= nCites);
+    return ok.map((n) => `<button type="button" class="cite-ref" data-i="${n - 1}" aria-pressed="false" aria-label="Show source ${n}">${n}</button>`).join("");
+  });
+  return h;
+}
+function renderMarkdown(text, nCites) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+    if (/^\s*\|.*\|\s*$/.test(line)) {                       // table
+      const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(lines[i]); i++; }
+      const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      const body = rows.filter((r) => /[^\s|:-]/.test(r));   // drop the |---|---| separator row
+      const [head, ...rest] = body.map(cells);
+      out.push(`<div class="table-wrap"><table><thead><tr>${(head || []).map((c) => `<th>${inlineMd(c, nCites)}</th>`).join("")}</tr></thead><tbody>${
+        rest.map((r) => `<tr>${r.map((c) => `<td>${inlineMd(c, nCites)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+      continue;
+    }
+    if (/^\s*([-*•]|\d+[.)])\s+/.test(line)) {               // list
+      const ordered = /^\s*\d+[.)]\s+/.test(line);
+      const items = [];
+      while (i < lines.length && /^\s*([-*•]|\d+[.)])\s+/.test(lines[i])) { items.push(lines[i].replace(/^\s*([-*•]|\d+[.)])\s+/, "")); i++; }
+      const tag = ordered ? "ol" : "ul";
+      out.push(`<${tag}>${items.map((it) => `<li>${inlineMd(it, nCites)}</li>`).join("")}</${tag}>`);
+      continue;
+    }
+    const para = [];                                          // paragraph
+    while (i < lines.length && lines[i].trim() && !/^\s*\|.*\|\s*$/.test(lines[i]) && !/^\s*([-*•]|\d+[.)])\s+/.test(lines[i])) { para.push(lines[i].trim()); i++; }
+    out.push(`<p>${inlineMd(para.join(" "), nCites)}</p>`);
+  }
+  return out.join("");
+}
+
 /* ============================ CHAT RENDERING ============================ */
+function setEmpty(empty) {
+  $("chat").classList.toggle("is-empty", empty);
+  $("heroExtras").innerHTML = empty ? `
+    <div class="starters">${STARTERS.map((s) => `<button type="button" class="starter" data-q="${esc(s.s)}"><b>${esc(s.t)}</b>${esc(s.s)}</button>`).join("")}</div>
+    <div class="trust">
+      <span>${ICON.check} Cites the official document and page</span>
+      <span>${ICON.check} Calculations run in code, not the model</span>
+      <span>${ICON.check} Says “not found” instead of guessing</span>
+    </div>` : "";
+  $("heroExtras").querySelectorAll(".starter").forEach((b) => b.onclick = () => ask(b.dataset.q));
+}
 function renderWelcome() {
   $("thread").innerHTML = `
-    <div class="welcome">
-      <h1>Ask Indian payroll law.<br><span>Get answers with proof.</span></h1>
-      <p>Every answer cites the official document and page it came from. Calculations run in code, not in the model.</p>
-      <div class="starter-grid">
-        ${STARTERS.map((s) => `<button type="button" class="starter" data-q="${esc(s.s)}"><b>${esc(s.t)}</b><span>${esc(s.s)}</span></button>`).join("")}
-      </div>
+    <div class="hero">
+      <div class="eyebrow">Compliance Copilot</div>
+      <h1>Indian payroll law,<br><span>answered with proof.</span></h1>
+      <p>Ask about PF, ESIC, wages, bonus, gratuity, Professional Tax or TDS. Central law plus your state, from official documents.</p>
     </div>`;
-  $("thread").querySelectorAll(".starter").forEach((b) => b.onclick = () => ask(b.dataset.q));
+  setEmpty(true);
+  $("workspace").classList.add("no-answers");
 }
 function renderChips() {
   $("chips").innerHTML = SUGGESTIONS.map((s) => `<button type="button" class="chip">${esc(s)}</button>`).join("");
   $("chips").querySelectorAll(".chip").forEach((b) => b.onclick = () => ask(b.textContent));
 }
 function addUser(text) {
-  const w = $("thread").querySelector(".welcome"); if (w) w.remove();
+  const h = $("thread").querySelector(".hero"); if (h) h.remove();
+  setEmpty(false);
   const el = document.createElement("div");
   el.className = "msg user"; el.textContent = text;
   $("thread").appendChild(el); scrollDown();
 }
-function addTyping() {
-  const el = document.createElement("div");
-  el.className = "msg bot"; el.id = "typing";
-  el.innerHTML = `<div class="meta-row"><span>Searching documents…</span></div><div class="typing" aria-label="Thinking"><i></i><i></i><i></i></div>`;
+function addPending(label) {
+  const el = document.createElement("article");
+  el.className = "msg bot"; el.id = "pending";
+  el.innerHTML = `<div class="meta-row"><span>${esc(label)}</span></div><div class="answer"><div class="typing" aria-label="Thinking"><i></i><i></i><i></i></div></div>`;
   $("thread").appendChild(el); scrollDown();
+  return el;
 }
-function removeTyping() { const t = $("typing"); if (t) t.remove(); }
+function removePending() { const t = $("pending"); if (t) t.remove(); }
 function scrollDown() { const m = $("messages"); m.scrollTop = m.scrollHeight; }
 
 const BADGE = {
   rag: '<span class="badge rag">From documents</span>',
-  tool: '<span class="badge tool">Calculator tool</span>',
+  tool: '<span class="badge tool">Calculator</span>',
   sql: '<span class="badge sql">SQL query</span>',
   not_found: '<span class="badge nf">Not in my documents</span>'
 };
+function metaRow(a) {
+  const extra = a.type === "tool" && a.tool ? `<span class="mono">${esc(a.tool)}</span>`
+              : a.type === "sql" && a.rows_scanned != null ? `<span>${esc(a.rows_scanned)} rows scanned</span>`
+              : a.type === "rag" ? `<span>${(a.citations || []).length} passages</span>` : "";
+  const scope = a.scope ? `<span>· ${esc(scopeLabel(a.scope))}</span>` : "";
+  return `<div class="meta-row">${BADGE[a.type] || ""}${extra}${scope}</div>`;
+}
 
 function addBot(a) {
   const id = "a" + Date.now() + Math.random().toString(16).slice(2, 6);
@@ -749,35 +794,34 @@ function addBot(a) {
   const el = document.createElement("article");
   el.className = "msg bot" + (a.type === "not_found" ? " notfound" : "");
   el.dataset.id = id;
-  const scope = a.scope ? `<span class="scope-chip">· Central + ${esc(stateName(a.scope.state))}</span>` : "";
-  const extra = a.type === "tool" && a.tool ? `<span class="mono">${esc(a.tool)}</span>`
-              : a.type === "sql" ? `<span>${esc(a.rows_scanned ?? "")} rows scanned</span>`
-              : a.type === "rag" ? `<span>${(a.citations || []).length} passages</span>` : "";
-  let html = `<div class="meta-row">${BADGE[a.type] || ""}${extra}${scope}</div>`;
-  html += `<div class="answer">${(a.answer || "").split(/\n\n+/).map((p) => `<p>${esc(p)}</p>`).join("")}</div>`;
+  const nC = (a.citations || []).length;
+  let html = metaRow(a) + `<div class="answer">${renderMarkdown(a.answer, nC)}</div>`;
 
-  if (a.table && a.table.rows) {
-    html += `<div class="table-wrap"><table><thead><tr>${a.table.columns.map((c, i) => `<th class="${i === a.table.columns.length - 1 ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>`;
+  if (a.table && a.table.rows && a.table.rows.length) {
+    const last = a.table.columns.length - 1;
+    html += `<div class="table-wrap"><table><thead><tr>${a.table.columns.map((c, i) => `<th class="${i === last ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>`;
     a.table.rows.forEach((r, ri) => {
       const isTotal = a.table.totalRow && ri === a.table.rows.length - 1;
-      html += `<tr class="${isTotal ? "total" : ""}">${r.map((c, i) => `<td class="${i === r.length - 1 ? "num" : ""}">${esc(c)}</td>`).join("")}</tr>`;
+      html += `<tr class="${isTotal ? "total" : ""}">${r.map((c, i) => `<td class="${i === last ? "num" : ""}">${esc(c)}</td>`).join("")}</tr>`;
     });
     html += `</tbody></table></div>`;
   }
   if (a.sql) html += `<pre class="code"><code>${esc(a.sql)}</code></pre>`;
   if (a.note) html += `<div class="note">${esc(a.note)}</div>`;
-  if (a.citations && a.citations.length) {
+  if (nC) {
     html += `<div class="cites">${a.citations.map((c, i) => `<button type="button" class="cite" data-i="${i}" aria-pressed="false">[${i + 1}] ${esc(c.doc)}${c.section ? " · " + esc(c.section) : ""}${c.page ? " · p. " + esc(c.page) : ""}</button>`).join("")}</div>`;
   }
-  html += `<div class="meta-row" style="justify-content:space-between"><span>${LIVE ? "" : "Demo answer · connect the backend for real results"}</span>
-    <div class="feedback"><button type="button" aria-label="Helpful" data-fb="up" aria-pressed="false">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v9H4v-9zM7 11l4-8a2 2 0 0 1 2 2v4h6a2 2 0 0 1 2 2.3l-1.3 7A2 2 0 0 1 17.7 20H7"/></svg></button>
-      <button type="button" aria-label="Not helpful" data-fb="down" aria-pressed="false">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 13V4h3v9zM17 13l-4 8a2 2 0 0 1-2-2v-4H5a2 2 0 0 1-2-2.3l1.3-7A2 2 0 0 1 6.3 4H17"/></svg></button></div></div>`;
+  const route = ROUTE_LABEL[a.type] || a.type;
+  const speed = a.latency_ms != null ? ` · ${(a.latency_ms / 1000).toFixed(1)} s` : "";
+  html += `<div class="foot"><span>${LIVE ? esc(route + speed) : "Demo answer · connect the backend for real results"}${a.stopped ? " · stopped" : ""}</span>
+    <div class="actions">
+      <button type="button" data-copy aria-label="Copy answer" title="Copy answer">${ICON.copy}</button>
+      <button type="button" aria-label="Helpful" title="Helpful" data-fb="up" aria-pressed="false">${ICON.up}</button>
+      <button type="button" aria-label="Not helpful" title="Not helpful" data-fb="down" aria-pressed="false">${ICON.down}</button>
+    </div></div>`;
   el.innerHTML = html;
 
   el.addEventListener("click", (e) => {
-    const cite = e.target.closest(".cite");
     const fb = e.target.closest("[data-fb]");
     if (fb) {
       el.querySelectorAll("[data-fb]").forEach((b) => b.setAttribute("aria-pressed", b === fb));
@@ -785,11 +829,14 @@ function addBot(a) {
       toast(fb.dataset.fb === "up" ? "Thanks! Logged as helpful." : "Logged. This question goes into the eval set.");
       return;
     }
+    if (e.target.closest("[data-copy]")) { copyText(answerToMarkdown(a)).then(() => toast("Answer copied")); return; }
+    const cite = e.target.closest(".cite, .cite-ref");
     selectAnswer(id, cite ? Number(cite.dataset.i) : null);
     if (cite && window.matchMedia("(max-width: 1180px)").matches) openDrawer("sources");
   });
 
   $("thread").appendChild(el);
+  $("workspace").classList.remove("no-answers");
   selectAnswer(id, null);
   scrollDown();
 }
@@ -798,65 +845,175 @@ function selectAnswer(id, highlight) {
   ui.activeId = id;
   document.querySelectorAll(".msg.bot").forEach((m) => m.classList.toggle("active", m.dataset.id === id));
   const a = ui.answers[id];
-  document.querySelectorAll(`.msg.bot[data-id="${id}"] .cite`).forEach((b, i) => b.setAttribute("aria-pressed", i === highlight));
+  document.querySelectorAll(`.msg.bot[data-id="${id}"] .cite, .msg.bot[data-id="${id}"] .cite-ref`)
+    .forEach((b) => b.setAttribute("aria-pressed", Number(b.dataset.i) === highlight));
   const list = $("srcList");
   if (!a || !a.citations || !a.citations.length) {
     $("srcFor").textContent = a && a.type === "not_found" ? "No passage scored above the threshold." : "This answer did not use document passages.";
-    list.innerHTML = `<div class="src-empty">${a && a.type === "not_found" ? "Nothing relevant was found, so the bot refused to guess." : "No sources for this answer."}</div>`;
+    list.innerHTML = `<div class="src-empty">${a && a.type === "not_found" ? "Nothing relevant was found, so the copilot refused to guess." : "No sources for this answer."}</div>`;
     return;
   }
-  $("srcFor").textContent = "Passages used for the selected answer";
+  $("srcFor").textContent = a.type === "tool" ? "Where the calculator's rates come from" : "Passages used for the selected answer";
   list.innerHTML = a.citations.map((c, i) => `
     <div class="src ${i === highlight ? "hl" : ""}" id="src-${i}">
       <div class="src-head"><b>[${i + 1}] ${esc(c.doc)}</b><span style="color:var(--muted)">${c.page ? "p. " + esc(c.page) : ""}</span></div>
       ${c.section ? `<div class="note">${esc(c.section)}</div>` : ""}
-      <div class="src-snippet">${esc(c.snippet)}</div>
-      <div class="score"><div class="bar"><i style="width:${Math.round((c.score || 0) * 100)}%"></i></div><span class="mono">${(c.score ?? 0).toFixed(2)}</span></div>
-      ${c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">Open official document ↗</a>` : ""}
+      ${c.snippet ? `<div class="src-snippet">${esc(c.snippet)}</div>` : ""}
+      ${c.score != null ? `<div class="score"><div class="bar"><i style="width:${Math.max(0, Math.min(100, Math.round(c.score * 100)))}%"></i></div><span class="mono">${Number(c.score).toFixed(2)}</span></div>` : ""}
+      ${/^https:\/\//.test(c.url || "") ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">Open official document ↗</a>` : ""}
     </div>`).join("");
   if (highlight !== null) { const s = $("src-" + highlight); if (s) s.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
 }
 
 /* ============================ ASK ============================ */
+function setBusy(busy) {
+  ui.busy = busy;
+  const b = $("sendBtn");
+  b.classList.toggle("stop", busy);
+  b.innerHTML = busy ? ICON.stop : ICON.send;
+  b.setAttribute("aria-label", busy ? "Stop generating" : "Send");
+  b.disabled = !busy && !$("input").value.trim();
+}
+function stopGenerating() { if (ui.controller) ui.controller.abort(); }
+
 async function ask(text) {
   text = (text || "").trim();
   if (!text || ui.busy) return;
-  ui.busy = true; $("sendBtn").disabled = true;
   const scope = resolveScope(text);
   addUser(text);
   $("input").value = ""; autoGrow(); renderScopeLine();
-  addTyping();
+  ui.controller = new AbortController();
+  setBusy(true);
+  const body = {
+    message: text,
+    history: ui.history.slice(-8),
+    jurisdiction: { central: true, state: scope.state, mode: ui.mode, detected: scope.how === "detected" }
+  };
   let answer;
   try {
-    if (LIVE) {
-      const res = await fetch(API_BASE + "/api/chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          history: ui.history.slice(-8),
-          jurisdiction: { central: true, state: scope.state, mode: ui.mode, detected: scope.how === "detected" }
-        })
-      });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      answer = await res.json();
-    } else {
-      await new Promise((r) => setTimeout(r, 650 + Math.random() * 500));
+    if (!LIVE) {
+      addPending("Searching documents…");
+      await sleep(650 + Math.random() * 500, ui.controller.signal);
       answer = demoAnswer(text, scope);
+      answer.latency_ms = null;
+    } else {
+      answer = await askStream(body, ui.controller.signal).catch((err) => {
+        if (err.name === "AbortError" || err.partial) throw err;
+        removePending();
+        return askOnce(body, ui.controller.signal);           // stream unavailable → plain JSON endpoint
+      });
     }
   } catch (err) {
-    answer = { type: "not_found", answer: "The backend did not respond (" + err.message + "). Check that the API server and Ollama are running." };
+    if (err.name === "AbortError" || err.partial) {
+      answer = err.partial || { type: "not_found", answer: "Stopped before an answer arrived." };
+      answer.stopped = true;
+    } else {
+      answer = { type: "not_found", answer: "The backend did not respond (" + err.message + "). Check that the API server and Ollama are running." };
+    }
   }
-  answer.scope = answer.scope || { state: scope.state };
-  removeTyping();
+  removePending();
+  answer.scope = answer.scope || { state: scope.state, states: scope.states, how: scope.how };
+  answer.question = text;
   addBot(answer);
   ui.history.push({ role: "user", content: text }, { role: "assistant", content: answer.answer || "" });
-  ui.busy = false; $("sendBtn").disabled = !$("input").value.trim();
+  ui.transcript.push({ q: text, a: answer });
+  ui.controller = null;
+  setBusy(false);
+}
+function sleep(ms, signal) {
+  return new Promise((res, rej) => {
+    const t = setTimeout(res, ms);
+    signal && signal.addEventListener("abort", () => { clearTimeout(t); rej(new DOMException("Aborted", "AbortError")); });
+  });
+}
+async function askOnce(body, signal) {
+  addPending("Searching documents…");
+  const res = await fetch(API_BASE + "/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+// Server-Sent Events over fetch: `meta`, then `token`*, then `done` with the full answer.
+async function askStream(body, signal) {
+  const res = await fetch(API_BASE + "/api/chat/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  if (!res.ok || !res.body) throw new Error("stream unavailable");
+  const pending = addPending("Searching documents…");
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", raw = "", meta = null;
+  const answerEl = () => pending.querySelector(".answer");
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let cut;
+      while ((cut = buf.indexOf("\n\n")) !== -1) {
+        const block = buf.slice(0, cut); buf = buf.slice(cut + 2);
+        const ev = (block.match(/^event: (.*)$/m) || [])[1];
+        const data = JSON.parse((block.match(/^data: (.*)$/m) || [])[1] || "{}");
+        if (ev === "meta") {
+          meta = data;
+          pending.querySelector(".meta-row").innerHTML = `${BADGE[data.route === "rag" ? "rag" : data.route] || ""}<span>· ${esc(scopeLabel(data.scope))}</span>`;
+        } else if (ev === "token") {
+          raw += data.t;
+          // citations are numbered but not clickable until `done` confirms them
+          const cursor = '<span class="cursor" aria-hidden="true"></span>';
+          const html = renderMarkdown(raw, 99);
+          answerEl().innerHTML = /<\/p>$/.test(html) ? html.replace(/<\/p>$/, cursor + "</p>") : html + cursor;
+          scrollDown();
+        } else if (ev === "done") {
+          return data;
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name === "AbortError" && raw) {
+      const e = new Error("stopped"); e.partial = { type: "rag", answer: raw, scope: meta && meta.scope, note: "Generation stopped; citations were not checked." };
+      throw e;
+    }
+    throw err;
+  }
+  throw new Error("stream ended early");
 }
 
 function sendFeedback(a, value) {
   if (!LIVE) return;
-  fetch(API_BASE + "/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value, answer: a }) }).catch(() => {});
+  const { question, ...answer } = a;
+  fetch(API_BASE + "/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value, question: question || "", answer }) }).catch(() => {});
 }
+
+/* ============================ COPY + EXPORT ============================ */
+function tableToMarkdown(t) {
+  if (!t || !t.rows || !t.rows.length) return "";
+  const row = (r) => "| " + r.map((c) => String(c).replace(/\|/g, "\\|")).join(" | ") + " |";
+  return [row(t.columns), row(t.columns.map(() => "---")), ...t.rows.map(row)].join("\n");
+}
+function answerToMarkdown(a) {
+  const parts = [a.answer || ""];
+  const tbl = tableToMarkdown(a.table); if (tbl) parts.push(tbl);
+  if (a.sql) parts.push("```sql\n" + a.sql + "\n```");
+  if (a.note) parts.push("_" + a.note + "_");
+  if (a.citations && a.citations.length) {
+    parts.push("Sources:\n" + a.citations.map((c, i) => `${i + 1}. ${c.doc}${c.section ? " · " + c.section : ""}${c.page ? " · p. " + c.page : ""}${c.url ? " (" + c.url + ")" : ""}`).join("\n"));
+  }
+  return parts.join("\n\n");
+}
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+  const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); } finally { ta.remove(); }
+  return Promise.resolve();
+}
+$("exportChat").onclick = () => {
+  if (!ui.transcript.length) { toast("Nothing to export yet"); return; }
+  const md = [`# Compliance Copilot chat`, `_Exported ${new Date().toLocaleString("en-IN")}. For reference only, not legal advice._`,
+    ...ui.transcript.map(({ q, a }) => `## Q: ${q}\n\n**${ROUTE_LABEL[a.type] || a.type} · ${scopeLabel(a.scope)}**\n\n${answerToMarkdown(a)}`)].join("\n\n");
+  const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
+  const link = Object.assign(document.createElement("a"), { href: url, download: `compliance-copilot-${new Date().toISOString().slice(0, 10)}.md` });
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
 
 /* ============================ DEMO ENGINE (frontend-only) ============================
    Placeholder text in [brackets] marks values the real backend must take from documents.
@@ -881,38 +1038,49 @@ function demoAnswer(q, scope) {
         ["Total to PF", "", fmtINR(emp + er)]
       ]},
       note: "Arithmetic is done by Python, not the model. Rates come from the cited circular.",
-      citations: [{ doc: "EPFO contribution-rate circular", section: "[para]", page: "[x]", score: 0.79, snippet: "[Passage: contribution rates for employee and employer, and the pension wage cap]", url: "" }]
+      citations: [{ doc: "EPFO contribution-rate circular", section: "[para]", page: "", score: null, snippet: "Effective [date]", url: "" }]
     };
   }
   if (/esic|esi\b/.test(t) && /(employee|sample|above|list|which)/.test(t)) {
     return {
       type: "sql", rows_scanned: 25,
-      answer: "[N] of 25 sample employees have gross wages above the ESIC ceiling: [E104], [E111], [E117]… ESIC should not be deducted for them.",
-      sql: "SELECT emp_id, name, gross\nFROM employees\nWHERE gross > :esic_ceiling\nORDER BY gross DESC;",
-      note: "Read-only query on synthetic data. The ceiling value is pulled from the ESIC notification."
+      answer: "[N] rows from the synthetic sample data: [E104], [E111], [E117]… ESIC should not be deducted for them.",
+      sql: "SELECT emp_id, name, gross\nFROM employees\nWHERE gross > :esic_ceiling\nORDER BY gross DESC\nLIMIT 200",
+      note: "Read-only query on synthetic data. The ceiling value is pulled from rates.yaml, not written in the SQL."
     };
   }
   if (/esic|esi\b/.test(t)) {
     return {
       type: "rag",
-      answer: `${amount ? "For " + fmtINR(amount) + " gross: " : ""}ESIC applies only when gross wages are at or below the notified wage ceiling ([CEILING]). Above it, the employee is outside coverage, unless they were already covered at the start of the current contribution period.`,
+      answer: `**${amount ? "For " + fmtINR(amount) + " gross: it depends on the ceiling." : "It depends on the wage ceiling."}** ESIC applies only when gross wages are at or below the notified wage ceiling ([CEILING]) [2]. Above it, the employee is outside coverage, unless they were already covered at the start of the current contribution period [1].`,
       citations: [
         { doc: "Code on Social Security, 2020", section: "[chapter on ESI]", page: "[x]", score: 0.86, snippet: "[Passage: definition of employee and coverage under the ESI chapter]", url: "" },
         { doc: "ESIC wage-ceiling notification", section: "", page: "1", score: 0.81, snippet: "[Passage: notified wage ceiling and effective date]", url: "" }
       ]
     };
   }
+  if (/compare|vs\.?|versus/.test(t) && /professional tax|\bpt\b/.test(t)) {
+    const names = (scope.states.length > 1 ? scope.states : ["gujarat", "maharashtra"]).map(stateName);
+    return {
+      type: "rag", scope: { state: scope.states[0], states: scope.states.length > 1 ? scope.states : ["gujarat", "maharashtra"], how: "detected" },
+      answer: `| State | Monthly PT on ₹15,000 |\n|---|---|\n| ${names[0]} | [AMOUNT] [1] |\n| ${names[1]} | [AMOUNT] [2] |\n\nBoth states levy PT by monthly salary slab; the amounts differ by slab.`,
+      citations: [
+        { doc: `${names[0]} Professional Tax schedule`, section: "Schedule I", page: "[x]", score: 0.83, snippet: "[Passage: monthly salary slabs]", url: "" },
+        { doc: `${names[1]} Professional Tax schedule`, section: "Schedule I", page: "[x]", score: 0.8, snippet: "[Passage: monthly salary slabs]", url: "" }
+      ]
+    };
+  }
   if (/professional tax|\bpt\b/.test(t)) {
     return {
       type: "rag",
-      answer: `Professional Tax is a state levy, so I searched ${stateName(scope.state)} rules. ${amount ? "For a monthly salary of " + fmtINR(amount) + ", " : ""}the applicable slab is [SLAB] → [AMOUNT] per month, deducted by the employer.`,
+      answer: `Professional Tax is a state levy, so I searched ${stateName(scope.state)} rules. ${amount ? "For a monthly salary of " + fmtINR(amount) + ", " : ""}the applicable slab is [SLAB] → **[AMOUNT] per month**, deducted by the employer [1].`,
       citations: [{ doc: `${stateName(scope.state)} Professional Tax schedule`, section: "Schedule I", page: "[x]", score: 0.83, snippet: "[Passage: monthly salary slabs and tax amounts]", url: "" }]
     };
   }
   if (/gratuity/.test(t)) {
     return {
       type: "rag",
-      answer: "Under the Code on Social Security, gratuity for permanent employees still needs [5 years] of continuous service. Fixed-term employees qualify after [1 year]. The amount is [formula] per completed year.\n\nNote: the Payment of Gratuity Act, 1972 has been replaced, so I answered from the Code.",
+      answer: "**Yes, with a shorter qualifying period.** Under the Code on Social Security, permanent employees still need [5 years] of continuous service [1], while fixed-term employees qualify after [1 year] [2].\n\n- Amount: [formula] per completed year [1]\n- The Payment of Gratuity Act, 1972 has been replaced, so I answered from the Code.",
       citations: [
         { doc: "Code on Social Security, 2020", section: "[gratuity chapter]", page: "[x]", score: 0.84, snippet: "[Passage: eligibility for gratuity, incl. fixed-term employees]", url: "" },
         { doc: "Ministry FAQs on Labour Codes", section: "[FAQ no.]", page: "[x]", score: 0.77, snippet: "[Passage: FAQ on fixed-term gratuity]", url: "" }
@@ -922,13 +1090,13 @@ function demoAnswer(q, scope) {
   if (/bonus/.test(t)) {
     return {
       type: "rag",
-      answer: "Bonus is now covered by the Code on Wages. Eligible employees earning up to [WAGE LIMIT] get a minimum of [x]% and a maximum of [y]% of wages, subject to the calculation ceiling.",
+      answer: "Bonus is now covered by the Code on Wages [1]. Eligible employees earning up to [WAGE LIMIT] get a minimum of [x]% and a maximum of [y]% of wages, subject to the calculation ceiling [1].",
       citations: [{ doc: "Code on Wages, 2019", section: "[bonus chapter]", page: "[x]", score: 0.8, snippet: "[Passage: eligibility and minimum/maximum bonus]", url: "" }]
     };
   }
   return {
     type: "rag",
-    answer: "Demo mode: this is where the answer from your documents appears. Connect the backend (/api/chat) to get real, cited answers for Central + " + stateName(scope.state) + ".",
+    answer: "Demo mode: this is where the answer from your documents appears [1]. Connect the backend (/api/chat) to get real, cited answers for " + scopeLabel(scope) + ".",
     citations: [{ doc: "Code on Wages, 2019", section: "[section]", page: "[x]", score: 0.62, snippet: "[Most relevant passage]", url: "" }]
   };
 }
@@ -937,36 +1105,63 @@ function demoAnswer(q, scope) {
 $("uploadBtn").onclick = () => $("fileInput").click();
 $("fileInput").onchange = async (e) => {
   const files = [...e.target.files]; if (!files.length) return;
+  const scope = resolveScope("").state;
   for (const f of files) {
     if (LIVE) {
-      const fd = new FormData(); fd.append("file", f); fd.append("scope", resolveScope("").state);
-      try { await fetch(API_BASE + "/api/ingest/file", { method: "POST", body: fd }); } catch (err) {}
+      const fd = new FormData(); fd.append("file", f); fd.append("scope", scope);
+      try {
+        const r = await fetch(API_BASE + "/api/ingest/file", { method: "POST", body: fd });
+        if (!r.ok) { toast((await r.json().catch(() => ({}))).detail || "Upload rejected"); continue; }
+      } catch (err) { toast("Upload failed"); continue; }
+    } else {
+      DOCS.unshift({ name: f.name.replace(/\.pdf$/i, ""), scope: "central", status: "current", meta: "Added (demo, not indexed)" });
     }
-    DOCS.unshift({ name: f.name.replace(/\.pdf$/i, ""), scope: "central", status: "current", meta: LIVE ? "Indexing…" : "Added (demo, not indexed)" });
   }
-  renderScopeLine(); toast(`${files.length} file${files.length > 1 ? "s" : ""} added`);
+  if (LIVE) pollDocuments(); else renderScopeLine();
+  toast(`${files.length} file${files.length > 1 ? "s" : ""} sent for indexing`);
   e.target.value = "";
 };
 $("linkForm").onsubmit = async (e) => {
   e.preventDefault();
   const url = $("linkInput").value.trim(); if (!url) return;
+  if (!/^https:\/\//i.test(url)) { toast("Only https links are accepted"); return; }
   if (LIVE) {
-    try { await fetch(API_BASE + "/api/ingest/url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) }); } catch (err) {}
+    try {
+      const r = await fetch(API_BASE + "/api/ingest/url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url, scope: "central" }) });
+      if (!r.ok) { toast("Link rejected"); return; }
+    } catch (err) { toast("Could not reach the backend"); return; }
+    pollDocuments();
+  } else {
+    let host = url; try { host = new URL(url).hostname; } catch (err) {}
+    DOCS.unshift({ name: "Linked document", scope: "central", status: "current", meta: host + " · demo" });
+    renderScopeLine();
   }
-  let host = url; try { host = new URL(url).hostname; } catch (err) {}
-  DOCS.unshift({ name: "Linked document", scope: "central", status: "current", meta: host + (LIVE ? " · indexing…" : " · demo") });
-  $("linkInput").value = ""; renderScopeLine(); toast("Link added");
+  $("linkInput").value = ""; toast("Link added");
 };
+async function loadDocuments() {
+  try {
+    const d = await fetch(API_BASE + "/api/documents").then((x) => x.json());
+    if (Array.isArray(d)) { DOCS = d; renderScopeLine(); }
+    return Array.isArray(d) && d.some((x) => /index/i.test(x.meta || ""));
+  } catch (e) { return false; }
+}
+// Refresh the list while anything says "indexing…"
+async function pollDocuments(tries = 30) {
+  const busy = await loadDocuments();
+  if (busy && tries > 0) setTimeout(() => pollDocuments(tries - 1), 2000);
+}
 
 /* ============================ MISC UI ============================ */
 function autoGrow() { const ta = $("input"); ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; }
-$("input").addEventListener("input", () => { autoGrow(); $("sendBtn").disabled = ui.busy || !$("input").value.trim(); renderScopeLine(); });
-$("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask($("input").value); } });
-$("composer").onsubmit = (e) => { e.preventDefault(); ask($("input").value); };
+$("input").addEventListener("input", () => { autoGrow(); if (!ui.busy) $("sendBtn").disabled = !$("input").value.trim(); renderScopeLine(); });
+$("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!ui.busy) ask($("input").value); } });
+$("composer").onsubmit = (e) => { e.preventDefault(); if (ui.busy) stopGenerating(); else ask($("input").value); };
 $("newChat").onclick = () => {
-  ui.history = []; ui.answers = {}; ui.activeId = null; renderWelcome();
+  stopGenerating();
+  ui.history = []; ui.transcript = []; ui.answers = {}; ui.activeId = null; renderWelcome();
   $("srcList").innerHTML = '<div class="src-empty">No answer selected yet.</div>';
   $("srcFor").textContent = "Select an answer to see the passages it used.";
+  $("input").focus();
 };
 
 function openDrawer(which) { $(which).classList.add("open"); $("scrim").classList.add("show"); }
@@ -987,25 +1182,36 @@ async function checkHealth() {
     if (!r.ok) throw new Error();
     const h = await r.json();
     LIVE = true;
-    $("statusDot").classList.add("on");
-    $("statusText").textContent = (h.model || "LLM") + " · online";
+    const ok = h.status === "ok";
+    $("statusDot").classList.toggle("on", ok);
+    $("statusText").textContent = ok ? `${h.model} · ${h.docs} docs` : "Needs attention";
+    $("statusPill").title = ok ? "Backend online" : (h.issues || []).join("\n");
     $("modeLabel").textContent = "live";
+    $("kvModel").textContent = "Ollama · " + (h.model || "?");
+    const notice = $("notice");
+    notice.textContent = ok ? "" : "Backend is up, but: " + (h.issues || []).join(" · ");
+    notice.classList.toggle("show", !ok);
     try {
-      const d = await fetch(API_BASE + "/api/documents").then((x) => x.json());
-      if (Array.isArray(d) && d.length) { DOCS = d; renderScopeLine(); }
+      const s = await fetch(API_BASE + "/api/states").then((x) => x.json());
+      if (Array.isArray(s) && s.length) { STATES = s; fillStateSelect(); }
     } catch (e) {}
+    await loadDocuments();
   } catch (e) {
     LIVE = false;
     $("statusDot").classList.remove("on");
-    $("statusText").textContent = "Demo mode · backend offline";
+    $("statusText").textContent = "Demo mode";
+    $("statusPill").title = "Backend offline: answers are demo placeholders";
     $("modeLabel").textContent = "demo";
   }
+  renderScopeLine();
 }
 
 /* ============================ INIT ============================ */
+if (window.matchMedia("(max-width: 820px)").matches) $("input").placeholder = "Ask about PF, ESIC, gratuity, PT…";
 initJurisdiction();
 renderChips();
 renderWelcome();
+setBusy(false);
 renderScopeLine();
 checkHealth();
 </script>
