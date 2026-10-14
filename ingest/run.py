@@ -21,7 +21,8 @@ from tqdm import tqdm
 
 from app import catalog
 from app.logs import now_iso
-from app.services import Services, build_services
+from app.config import get_settings
+from app.vectorstore import VectorStore, make_store
 from ingest.chunk import chunk_pages
 from ingest.download import download, sha256_file
 from ingest.index import index_document
@@ -39,11 +40,15 @@ class Outcome:
     deleted: int = 0
 
 
-def ingest_file(path: Path, meta: dict[str, str], services: Services, *, force: bool = False, dry_run: bool = False) -> Outcome:
-    """Parse, chunk and index one local file described by `meta` (a sources.csv-style row)."""
+def ingest_file(path: Path, meta: dict[str, str], store: VectorStore | None, *, store_error: str = "",
+                force: bool = False, dry_run: bool = False) -> Outcome:
+    """Parse, chunk and index one local file described by `meta` (a sources.csv-style row).
+
+    Needs only the Pinecone store: no LLM, and no Ollama when EMBED_PROVIDER=pinecone.
+    """
     doc = meta["doc"]
-    if services.store is None:
-        return Outcome(doc, f"failed: {services.store_error or 'Pinecone not configured'}")
+    if store is None:
+        return Outcome(doc, f"failed: {store_error or 'Pinecone not configured'}")
     sha = sha256_file(path)
     entry = catalog.read_manifest().get(doc, {})
     if entry.get("indexed_sha256") == sha and not force:
@@ -54,9 +59,9 @@ def ingest_file(path: Path, meta: dict[str, str], services: Services, *, force: 
     chunks = chunk_pages(pages, meta.get("doc_type", "act"))
     # Delete old vectors only if this doc was indexed before from a different file version.
     replace = bool(entry.get("indexed_sha256")) and entry["indexed_sha256"] != sha
-    with tqdm(total=len(chunks), desc=f"  embed {doc[:40]}", unit="chunk", leave=False) as bar:
+    with tqdm(total=len(chunks), desc=f"  index {doc[:40]}", unit="chunk", leave=False) as bar:
         result = index_document(
-            doc, chunks, {**meta, "source_url": meta.get("url", "")}, services.llm, services.store,
+            doc, chunks, {**meta, "source_url": meta.get("url", "")}, store,
             replace=replace, dry_run=dry_run, progress=bar.update,
         )
     if not dry_run:
@@ -75,7 +80,9 @@ def run(limit: int | None = None, only: str | None = None, force: bool = False, 
     if only:
         rows = [r for r in rows if only.lower() in r["doc"].lower()]
     rows = rows[:limit] if limit else rows
-    services = build_services()
+    store, store_error = make_store(get_settings())
+    if store is None:
+        log.error("Pinecone store unavailable: %s", store_error)
     outcomes: list[Outcome] = []
     for row in tqdm(rows, desc="Documents", unit="doc"):
         dl = download(row)
@@ -83,7 +90,7 @@ def run(limit: int | None = None, only: str | None = None, force: bool = False, 
             outcomes.append(Outcome(row["doc"], dl.status))
             continue
         try:
-            outcomes.append(ingest_file(dl.path, row, services, force=force, dry_run=dry_run))
+            outcomes.append(ingest_file(dl.path, row, store, store_error=store_error, force=force, dry_run=dry_run))
         except Exception as e:  # one bad document must not stop the batch
             log.exception("Failed on %s", row["doc"])
             outcomes.append(Outcome(row["doc"], f"failed: {e.__class__.__name__}: {str(e)[:80]}"))

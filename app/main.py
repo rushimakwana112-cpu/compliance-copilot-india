@@ -109,7 +109,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         from ingest.run import ingest_file  # imported here so the API starts fast
 
         try:
-            out = ingest_file(path, meta, svc())
+            out = ingest_file(path, meta, svc().store, store_error=svc().store_error)
             failed = out.status.startswith("failed")
             catalog.set_job(meta["doc"], meta["scope"], out.status if failed else None)
         except Exception as e:  # report in the sidebar instead of crashing the worker

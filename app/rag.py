@@ -104,13 +104,12 @@ def retrieve(services: Services, question: str, scope: Scope) -> list[Passage]:
     """Top passages for `question`. For a comparison, each state gets its own retrieval so neither is crowded out."""
     s = services.settings
     assert services.store is not None
-    vector = services.llm.embed([question])[0]
     statuses = ("current", "repealed", "historical") if REPEALED_HINT.search(question) else ("current",)
     boost = wanted_doc_types(question)
     per_state_keep = s.keep_k if len(scope.states) == 1 else max(2, s.keep_k - 1)
     kept: dict[tuple, Passage] = {}
     for state in scope.states:
-        matches = services.store.query(vector, s.top_k, scope_filter([state], statuses))
+        matches = services.store.search(question, s.top_k, scope_filter([state], statuses))
         ranked = sorted((_passage(m.metadata, m.score, boost) for m in matches), key=lambda p: p.rank_score, reverse=True)
         for p in ranked[:per_state_keep]:
             kept.setdefault((p.doc, p.page, p.text[:80]), p)

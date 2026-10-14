@@ -109,6 +109,17 @@ def test_groq_stream():
     assert "".join(groq_client(FakeGroqSDK(iter(chunks))).stream([{"role": "user", "content": "q"}])) == "Yes [1]."
 
 
+def test_quota_message_through_the_api(settings, store):
+    settings.llm_provider = "groq"
+    store.add("gratuity fixed term employee", doc="SS Code", page=1, scope="central", status="current", doc_type="act")
+    llm = groq_client(FakeGroqSDK(rate_limited(), rate_limited()))
+    with TestClient(create_app(Services(settings, llm, store))) as c:
+        body = c.post("/api/chat", json={"message": "gratuity fixed term employee"}).json()
+        text = c.post("/api/chat/stream", json={"message": "gratuity fixed term employee"}).text
+    assert body["type"] == "not_found" and body["answer"] == QUOTA_MESSAGE and body["quota_exceeded"] is True
+    assert '"quota_exceeded": true' in text
+
+
 def test_health_reports_provider(settings, store):
     settings.llm_provider, settings.groq_model = "groq", "qwen-test"
     with TestClient(create_app(Services(settings, groq_client(FakeGroqSDK()), store))) as c:

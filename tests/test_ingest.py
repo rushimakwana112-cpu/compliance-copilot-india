@@ -55,18 +55,18 @@ def test_vector_ids_are_deterministic():
 
 
 def test_ingest_is_idempotent_and_replaces_changed_files(act_pdf, services, store):
-    first = ingest_file(act_pdf, META, services)
+    first = ingest_file(act_pdf, META, store)
     n = store.count()
     assert first.status == "indexed" and n == first.chunks > 0
-    assert ingest_file(act_pdf, META, services).status == "unchanged"
+    assert ingest_file(act_pdf, META, store).status == "unchanged"
     # pretend the file changed upstream: old vectors are removed, no duplicates remain
     catalog.update_manifest(META["doc"], {"indexed_sha256": "old-hash"})
-    again = ingest_file(act_pdf, META, services)
+    again = ingest_file(act_pdf, META, store)
     assert again.status == "re-indexed" and again.deleted == n and store.count() == n
     meta = next(iter(store.records.values()))["metadata"]
     assert {"doc", "section", "page", "scope", "status", "effective_date", "doc_type", "source_url", "text"} <= set(meta)
 
 
 def test_dry_run_touches_nothing(act_pdf, services, store):
-    assert ingest_file(act_pdf, META, services, dry_run=True).status == "dry-run"
+    assert ingest_file(act_pdf, META, store, dry_run=True).status == "dry-run"
     assert store.count() == 0 and catalog.read_manifest() == {}
