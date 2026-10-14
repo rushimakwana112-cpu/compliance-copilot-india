@@ -1,0 +1,24 @@
+# Few-shot examples for text-to-SQL (app/sql_agent.py).
+# Rules the examples teach the model:
+#   * only SELECT on the `employees` table
+#   * legal thresholds are NEVER written as numbers; use a named parameter instead:
+#       :esic_ceiling       (esic.wage_ceiling in rates.yaml)
+#       :eps_wage_ceiling   (pf.eps_wage_ceiling)
+#       :gratuity_min_years (gratuity.min_years_permanent)
+#   * numbers the user typed themselves (e.g. "gross above 50,000") may be literals
+- question: How many sample employees are in Gujarat?
+  sql: SELECT COUNT(*) AS employees FROM employees WHERE state = 'gujarat'
+- question: Which sample employees are above the ESIC limit?
+  sql: SELECT emp_id, name, gross FROM employees WHERE gross > :esic_ceiling ORDER BY gross DESC
+- question: Which of our employees are covered by ESIC?
+  sql: SELECT emp_id, name, gross FROM employees WHERE gross <= :esic_ceiling ORDER BY gross
+- question: List the fixed-term employees in the sample data
+  sql: SELECT emp_id, name, state, doj FROM employees WHERE employment_type = 'fixed-term' ORDER BY doj
+- question: Average gross salary by state in our sample data
+  sql: SELECT state, ROUND(AVG(gross)) AS avg_gross, COUNT(*) AS employees FROM employees GROUP BY state ORDER BY avg_gross DESC
+- question: Which sample employees have basic above the EPS wage ceiling?
+  sql: SELECT emp_id, name, basic FROM employees WHERE basic > :eps_wage_ceiling ORDER BY basic DESC
+- question: Which of our staff have served long enough for gratuity?
+  sql: SELECT emp_id, name, doj, ROUND((julianday('now') - julianday(doj)) / 365.25, 1) AS years_of_service FROM employees WHERE (julianday('now') - julianday(doj)) / 365.25 >= :gratuity_min_years ORDER BY doj
+- question: Show the top 5 highest paid employees in the sample data
+  sql: SELECT emp_id, name, state, gross FROM employees ORDER BY gross DESC LIMIT 5

@@ -43,3 +43,9 @@ p.2 #1 [Section 55 · Nomination] '55. Nomination.—Each employee shall make no
 `"Calculate PF for basic ₹18,000"` is routed to `pf_calculator(basic=18000)`. With the shipped `data/rates.yaml` (all values `null`) it answers *"Rate not configured: `pf.employee_rate` is empty in data/rates.yaml, so I won't calculate."* Once you fill the values from the EPFO circular, it returns a 4-row table (employee PF, EPS, EPF, total) citing that circular.
 
 **What to learn:** this is "tool use" in its simplest form: the router spots a calculation and hands it to ordinary code. LLMs predict likely-looking digits rather than computing them, so payroll maths must never come from the model. Keeping every figure in one YAML file with its `source_doc` and `effective_date` means that when a rate changes you edit one line, and every answer still shows where the number came from.
+
+## Step 6: text-to-SQL with a guard
+
+`"Which sample employees are above the ESIC limit?"` → Qwen writes `SELECT emp_id, name, gross FROM employees WHERE gross > :esic_ceiling`, the guard adds `LIMIT 200`, `:esic_ceiling` is filled from `rates.yaml`, and the query runs on a read-only connection. The tests feed the guard `DROP`, `UPDATE`, `DELETE`, `INSERT`, `SELECT 1; SELECT 2`, unknown tables, unknown columns, `PRAGMA`, `ATTACH` and `load_extension()`, and all of them are rejected.
+
+**What to learn:** never run model-written SQL as-is. Parsing it with a real parser (sqlglot) lets you check *what* it does, not just what it looks like, and opening SQLite with `mode=ro` is a second, independent lock. That pattern is called defence in depth. Passing legal thresholds as `:parameters` means the model never has to know (or invent) the ESIC ceiling. When the guard rejects a query, the model gets one retry with the error, which fixes most honest mistakes.
