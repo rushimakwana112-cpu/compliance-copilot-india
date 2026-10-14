@@ -59,12 +59,16 @@ def create_app(services: Services | None = None) -> FastAPI:
         issues = list(llm.get("issues", []))
         if s.store is None:
             issues.append(s.store_error or "Pinecone is not configured")
+        cfg = s.settings
         return Health(
             status="ok" if not issues else "degraded",
-            model=s.settings.llm_model,
+            model=cfg.active_model or "(not set)",
             pinecone=s.store is not None,
             docs=catalog.indexed_count(),
-            ollama=bool(llm.get("ok")),
+            provider=cfg.llm_provider,
+            embed_provider=cfg.embed_provider,
+            llm_ok=bool(llm.get("ok")),
+            public_mode=cfg.public_mode,
             issues=issues,
         )
 

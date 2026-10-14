@@ -14,7 +14,7 @@ from typing import Any
 
 from app import logs, rag, sql_agent, tools
 from app.jurisdiction import Scope, detect_states, resolve
-from app.llm import LLMError
+from app.llm import QUOTA_MESSAGE, LLMError, QuotaExceeded
 from app.router import route
 from app.schemas import ChatRequest, ChatResponse, ScopeOut
 from app.services import Services
@@ -60,6 +60,8 @@ def _answer(services: Services, turn: Turn) -> ChatResponse:
 
 
 def _llm_down(turn: Turn, err: Exception) -> ChatResponse:
+    if isinstance(err, QuotaExceeded):
+        return ChatResponse(type="not_found", answer=QUOTA_MESSAGE, scope=_scope_out(turn.scope), quota_exceeded=True)
     return ChatResponse(type="not_found", answer=f"The language model is not available: {err}",
                         scope=_scope_out(turn.scope), note="Check /api/health.")
 
@@ -91,8 +93,10 @@ def handle_stream(services: Services, req: ChatRequest) -> Iterator[tuple[str, d
     t0 = time.perf_counter()
     try:
         turn = plan(services, req)
-    except LLMError as e:
-        yield "done", ChatResponse(type="not_found", answer=f"The language model is not available: {e}").model_dump(exclude_none=True)
+    except LLMError as e:  # plan() already falls back on errors; this is a last resort
+        quota = isinstance(e, QuotaExceeded)
+        yield "done", ChatResponse(type="not_found", answer=QUOTA_MESSAGE if quota else f"The language model is not available: {e}",
+                                   quota_exceeded=quota or None).model_dump(exclude_none=True)
         return
     yield "meta", {"route": turn.route, "scope": _scope_out(turn.scope).model_dump(exclude_none=True)}
     resp: ChatResponse

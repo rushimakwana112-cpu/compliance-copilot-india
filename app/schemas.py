@@ -66,6 +66,9 @@ class ChatResponse(BaseModel):
     rows_scanned: int | None = None
     note: str | None = None
     latency_ms: int = 0
+    # Set only when true: the provider's free quota is used up / the answer came from the cache.
+    quota_exceeded: bool | None = None
+    cached: bool | None = None
 
 
 class Health(BaseModel):
@@ -73,7 +76,10 @@ class Health(BaseModel):
     model: str
     pinecone: bool
     docs: int
-    ollama: bool = False
+    provider: str = "groq"
+    embed_provider: str = "pinecone"
+    llm_ok: bool = False
+    public_mode: bool = False
     issues: list[str] = Field(default_factory=list)
 
 

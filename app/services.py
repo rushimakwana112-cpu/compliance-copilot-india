@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.config import Settings, get_settings
-from app.llm import LLM, OllamaClient
+from app.llm import LLM, make_llm
 from app.vectorstore import PineconeStore, VectorStore
 
 
@@ -20,7 +20,7 @@ class Services:
 def build_services(settings: Settings | None = None) -> Services:
     """Create real Ollama + Pinecone clients from settings."""
     s = settings or get_settings()
-    llm = OllamaClient(base_url=s.ollama_url, model=s.llm_model, embed_model=s.embed_model)
+    llm = make_llm(s)
     if not s.pinecone_api_key:
         return Services(s, llm, None, "PINECONE_API_KEY is not set in .env")
     try:

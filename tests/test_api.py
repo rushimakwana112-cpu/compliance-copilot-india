@@ -34,7 +34,7 @@ def test_health_reports_ollama_down(services, llm):
     with TestClient(create_app(services)) as c:
         body = c.get("/api/health").json()
     assert body["status"] == "degraded"
-    assert body["ollama"] is False
+    assert body["llm_ok"] is False
     assert any("Ollama" in i for i in body["issues"])
 
 
