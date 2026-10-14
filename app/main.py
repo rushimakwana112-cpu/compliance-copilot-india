@@ -87,6 +87,11 @@ def create_app(services: Services | None = None) -> FastAPI:
     def index() -> FileResponse:
         return FileResponse(FRONTEND_DIR / "index.html")
 
+    @app.get("/healthz", include_in_schema=False)
+    def healthz() -> dict[str, bool]:
+        """Cheap liveness check for Render: no Groq or Pinecone calls."""
+        return {"ok": True}
+
     @app.get("/api/health", response_model=Health)
     def health() -> Health:
         s = svc()

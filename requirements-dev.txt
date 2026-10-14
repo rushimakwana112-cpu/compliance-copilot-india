@@ -1,0 +1,4 @@
+# Tests: pip install -r requirements-dev.txt
+-r requirements-ingest.txt
+pytest>=8.2
+reportlab>=4.0   # builds a small PDF fixture

@@ -1,0 +1,12 @@
+# Extra libraries for ingestion (python -m ingest.run) and uploads in local mode.
+# Not installed on Render: the public app never parses PDFs.
+-r requirements.txt
+pypdf>=4.2
+beautifulsoup4>=4.12
+tqdm>=4.66
+rich>=13.7
+
+# Optional OCR for scanned PDFs. Also needs the Tesseract and Poppler programs installed
+# on Windows, so uncomment only after installing those:
+# pytesseract>=0.3.10
+# pdf2image>=1.17
