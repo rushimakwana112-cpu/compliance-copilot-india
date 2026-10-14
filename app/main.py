@@ -9,12 +9,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from app import catalog, logs, pipeline
 from app.config import DATA_DIR, FRONTEND_DIR
 from app.jurisdiction import is_known_state, load_states
+from app.limits import limit_message
 from app.schemas import (
     ChatRequest, ChatResponse, DocumentOut, Feedback, Health, IngestAccepted, IngestUrl, StateOut,
 )
@@ -22,6 +23,20 @@ from app.services import Services, build_services
 
 UPLOAD_DIR = DATA_DIR / "raw" / "uploads"
 log = logging.getLogger("app")
+PUBLIC_INGEST_OFF = ("Adding documents is turned off on the public demo. "
+                     "Run Compliance Copilot on your own computer to index your own PDFs (see the README).")
+
+
+def client_ip(request: Request, behind_proxy: bool) -> str:
+    """The caller's IP. Behind Render's proxy the real one is the first X-Forwarded-For entry.
+
+    A client can put anything in that header, so this limit stops casual overuse, not a determined abuser.
+    """
+    if behind_proxy:
+        forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return request.client.host if request.client else "unknown"
 
 
 def _doc_name(filename: str) -> str:
@@ -47,6 +62,26 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     def svc() -> Services:
         return app.state.services
+
+    @app.middleware("http")
+    async def public_guard(request: Request, call_next):
+        """Public mode: refuse ingestion before the upload is even read."""
+        if request.url.path.startswith("/api/ingest/") and svc().settings.public_mode:
+            return JSONResponse({"detail": PUBLIC_INGEST_OFF}, status_code=403)
+        return await call_next(request)
+
+    def rate_limited(request: Request) -> JSONResponse | None:
+        """In public mode: None if this IP may ask now, else a 429 whose body is a normal answer."""
+        s = svc().settings
+        if not s.public_mode:
+            return None
+        verdict = svc().limiter.hit(client_ip(request, behind_proxy=True))
+        if verdict.allowed:
+            return None
+        body = ChatResponse(type="not_found", answer=limit_message(verdict, s.rate_limit_per_min, s.rate_limit_per_day),
+                            note="Rate limit for the public demo.")
+        return JSONResponse(body.model_dump(exclude_none=True), status_code=429,
+                            headers={"Retry-After": str(verdict.retry_after)})
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
@@ -81,13 +116,17 @@ def create_app(services: Services | None = None) -> FastAPI:
         return [DocumentOut(**d) for d in catalog.documents()]
 
     @app.post("/api/chat", response_model=ChatResponse, response_model_exclude_none=True)
-    def chat(req: ChatRequest) -> ChatResponse:
+    def chat(req: ChatRequest, request: Request) -> ChatResponse | JSONResponse:
+        if (refused := rate_limited(request)) is not None:
+            return refused
         resp, _ = pipeline.handle(svc(), req)
         return resp
 
-    @app.post("/api/chat/stream")
-    def chat_stream(req: ChatRequest) -> StreamingResponse:
+    @app.post("/api/chat/stream", response_model=None)
+    def chat_stream(req: ChatRequest, request: Request) -> StreamingResponse | JSONResponse:
         """Server-Sent Events: `meta`, then `token` events (RAG only), then `done` with the full answer."""
+        if (refused := rate_limited(request)) is not None:
+            return refused
 
         def events():
             for name, data in pipeline.handle_stream(svc(), req):
@@ -112,6 +151,8 @@ def create_app(services: Services | None = None) -> FastAPI:
             out = ingest_file(path, meta, svc().store, store_error=svc().store_error)
             failed = out.status.startswith("failed")
             catalog.set_job(meta["doc"], meta["scope"], out.status if failed else None)
+            if not failed:
+                svc().cache.clear()  # new passages can change earlier answers
         except Exception as e:  # report in the sidebar instead of crashing the worker
             log.exception("Indexing failed for %s", meta["doc"])
             catalog.set_job(meta["doc"], meta["scope"], f"failed: {e.__class__.__name__}")

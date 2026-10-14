@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 Route = Literal["rag", "tool", "sql", "not_found"]
+MAX_MESSAGE_CHARS = 1000
+MAX_HISTORY_MESSAGES = 8  # 4 turns of user + assistant
 
 
 class Turn(BaseModel):
@@ -26,9 +28,15 @@ class JurisdictionIn(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=2000)
+    message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     history: list[Turn] = Field(default_factory=list)
     jurisdiction: JurisdictionIn = Field(default_factory=JurisdictionIn)
+
+    @field_validator("history")
+    @classmethod
+    def last_turns(cls, history: list[Turn]) -> list[Turn]:
+        """Only the last 4 turns are used, and each is capped, so a long chat can't inflate the prompt."""
+        return [Turn(role=t.role, content=t.content[:4000]) for t in history[-MAX_HISTORY_MESSAGES:]]
 
 
 class ScopeOut(BaseModel):

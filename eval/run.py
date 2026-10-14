@@ -88,7 +88,7 @@ def run(services: Services, rows: list[Row]) -> list[Result]:
             history = [Turn(role="user", content=parent.row.question), Turn(role="assistant", content=parent.resp.answer)]
         req = ChatRequest(message=row.question, history=history,
                           jurisdiction=JurisdictionIn(state=row.state or "gujarat", mode="auto"))
-        resp, turn = handle(services, req, log=False)
+        resp, turn = handle(services, req, log=False, use_cache=False)
         done[row.id] = Result(row, turn.route, resp, score(row, turn.route, resp))
     return list(done.values())
 

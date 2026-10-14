@@ -453,7 +453,7 @@ pre.code {
         <ul class="doc-list" id="docList"></ul>
       </section>
 
-      <section>
+      <section id="addSource">
         <h2 class="section-title">Add a source</h2>
         <div class="add-source">
           <input type="file" id="fileInput" accept="application/pdf" class="sr-only" multiple tabindex="-1">
@@ -473,7 +473,7 @@ pre.code {
         <h2 class="section-title">Pipeline</h2>
         <dl class="kv">
           <dt>LLM</dt><dd id="kvModel">Ollama · qwen2.5:7b</dd>
-          <dt>Embeddings</dt><dd>bge-m3</dd>
+          <dt>Embeddings</dt><dd id="kvEmbed">bge-m3</dd>
           <dt>Vector DB</dt><dd>Pinecone</dd>
           <dt>Data</dt><dd>sample_payroll.db</dd>
           <dt>Mode</dt><dd id="modeLabel">demo</dd>
@@ -494,7 +494,7 @@ pre.code {
           <div class="chips" id="chips"></div>
           <div class="input-row">
             <label for="input" class="sr-only">Ask a compliance question</label>
-            <textarea id="input" rows="1" placeholder="Ask about PF, ESIC, wages, bonus, gratuity, PT, TDS…"></textarea>
+            <textarea id="input" rows="1" maxlength="1000" placeholder="Ask about PF, ESIC, wages, bonus, gratuity, PT, TDS…"></textarea>
             <button class="send" id="sendBtn" type="submit" aria-label="Send" disabled></button>
           </div>
           <div class="disclaimer">For reference only, not legal advice. Always confirm against the cited official document.</div>
@@ -908,7 +908,7 @@ async function ask(text) {
       answer = err.partial || { type: "not_found", answer: "Stopped before an answer arrived." };
       answer.stopped = true;
     } else {
-      answer = { type: "not_found", answer: "The backend did not respond (" + err.message + "). Check that the API server and Ollama are running." };
+      answer = { type: "not_found", answer: "The backend did not respond (" + err.message + "). Check that the API server is running." };
     }
   }
   removePending();
@@ -929,12 +929,14 @@ function sleep(ms, signal) {
 async function askOnce(body, signal) {
   addPending("Searching documents…");
   const res = await fetch(API_BASE + "/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  if (res.status === 429) return res.json();               // rate limit: the body is a normal answer
   if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
 }
 // Server-Sent Events over fetch: `meta`, then `token`*, then `done` with the full answer.
 async function askStream(body, signal) {
   const res = await fetch(API_BASE + "/api/chat/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  if (res.status === 429) return res.json();               // rate limit: the body is a normal answer
   if (!res.ok || !res.body) throw new Error("stream unavailable");
   const pending = addPending("Searching documents…");
   const reader = res.body.getReader();
@@ -1187,7 +1189,9 @@ async function checkHealth() {
     $("statusText").textContent = ok ? `${h.model} · ${h.docs} docs` : "Needs attention";
     $("statusPill").title = ok ? "Backend online" : (h.issues || []).join("\n");
     $("modeLabel").textContent = "live";
-    $("kvModel").textContent = "Ollama · " + (h.model || "?");
+    $("kvModel").textContent = (h.provider === "groq" ? "Groq · " : "Ollama · ") + (h.model || "?");
+    $("kvEmbed").textContent = h.embed_provider === "pinecone" ? "llama-text-embed-v2 (Pinecone)" : "bge-m3";
+    $("addSource").hidden = !!h.public_mode;               // the public demo can't add documents
     const notice = $("notice");
     notice.textContent = ok ? "" : "Backend is up, but: " + (h.issues || []).join(" · ");
     notice.classList.toggle("show", !ok);

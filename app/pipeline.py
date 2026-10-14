@@ -70,19 +70,33 @@ def _log(turn: Turn, resp: ChatResponse) -> None:
     logs.append("chats", {
         "question": turn.message, "standalone": turn.question if turn.question != turn.message else None,
         "scope": turn.scope.states, "how": turn.scope.how, "route": turn.route, "type": resp.type,
-        "top_scores": turn.top_scores, "latency_ms": resp.latency_ms,
+        "top_scores": turn.top_scores, "latency_ms": resp.latency_ms, "cached": resp.cached,
     })
 
 
-def handle(services: Services, req: ChatRequest, *, log: bool = True) -> tuple[ChatResponse, Turn]:
-    """Answer one message (non-streaming)."""
+def _cached(services: Services, turn: Turn, t0: float) -> ChatResponse | None:
+    hit = services.cache.get(turn.question, turn.scope.states)
+    if hit is not None:
+        hit.latency_ms = int((time.perf_counter() - t0) * 1000)
+    return hit
+
+
+def handle(services: Services, req: ChatRequest, *, log: bool = True, use_cache: bool = True) -> tuple[ChatResponse, Turn]:
+    """Answer one message (non-streaming). Repeated questions come from the answer cache."""
     t0 = time.perf_counter()
     turn = plan(services, req)
+    hit = _cached(services, turn, t0) if use_cache else None
+    if hit is not None:
+        if log:
+            _log(turn, hit)
+        return hit, turn
     try:
         resp = _answer(services, turn)
     except LLMError as e:
         resp = _llm_down(turn, e)
     resp.latency_ms = int((time.perf_counter() - t0) * 1000)
+    if use_cache:
+        services.cache.put(turn.question, turn.scope.states, resp)
     if log:
         _log(turn, resp)
     return resp, turn
@@ -99,6 +113,11 @@ def handle_stream(services: Services, req: ChatRequest) -> Iterator[tuple[str, d
                                    quota_exceeded=quota or None).model_dump(exclude_none=True)
         return
     yield "meta", {"route": turn.route, "scope": _scope_out(turn.scope).model_dump(exclude_none=True)}
+    hit = _cached(services, turn, t0)
+    if hit is not None:  # no tokens to stream: the whole answer arrives with `done`
+        _log(turn, hit)
+        yield "done", hit.model_dump(exclude_none=True)
+        return
     resp: ChatResponse
     try:
         if turn.route == "rag":
@@ -115,5 +134,6 @@ def handle_stream(services: Services, req: ChatRequest) -> Iterator[tuple[str, d
     except LLMError as e:
         resp = _llm_down(turn, e)
     resp.latency_ms = int((time.perf_counter() - t0) * 1000)
+    services.cache.put(turn.question, turn.scope.states, resp)
     _log(turn, resp)
     yield "done", resp.model_dump(exclude_none=True)
