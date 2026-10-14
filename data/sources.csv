@@ -1,0 +1,11 @@
+# Official documents to index. One row per document. Lines starting with # are ignored.
+# scope: central | <state id from data/states.yaml>      status: current | repealed | historical
+# doc_type: act | rules | circular | notification | faq    effective_date: YYYY-MM-DD
+# TODO(Rushi): the 3 example rows below were NOT verified (the build machine could not reach .gov.in).
+#   Open each link in a browser first and replace it with the current official URL.
+#   Central:  labour.gov.in, indiacode.nic.in, egazette.gov.in, epfindia.gov.in, esic.gov.in, incometaxindia.gov.in
+#   Gujarat:  gujarat government sites (labour department, commercial tax for Professional Tax)
+url,doc,scope,status,effective_date,doc_type
+https://labour.gov.in/sites/default/files/the_code_on_wages_2019_no._29_of_2019.pdf,"Code on Wages, 2019",central,current,2025-11-21,act
+https://labour.gov.in/sites/default/files/ss_code_gazette.pdf,"Code on Social Security, 2020",central,current,2025-11-21,act
+https://www.indiacode.nic.in/bitstream/123456789/1874/1/A1972-39.pdf,"Payment of Gratuity Act, 1972",central,repealed,1972-09-16,act

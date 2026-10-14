@@ -1,0 +1,33 @@
+# States the app knows about, with aliases used for auto-detection.
+# Served at GET /api/states so the frontend and backend share one list.
+# Aliases are matched as whole words, case-insensitive. Add cities freely.
+- id: gujarat
+  name: Gujarat
+  aliases: [gujarat, ahmedabad, surat, vadodara, baroda, rajkot, gandhinagar, bhavnagar, jamnagar]
+- id: maharashtra
+  name: Maharashtra
+  aliases: [maharashtra, mumbai, bombay, pune, nagpur, nashik, thane, aurangabad]
+- id: karnataka
+  name: Karnataka
+  aliases: [karnataka, bengaluru, bangalore, mysuru, mysore, mangaluru, hubli]
+- id: delhi
+  name: Delhi
+  aliases: [delhi, new delhi]
+- id: madhya-pradesh
+  name: Madhya Pradesh
+  aliases: [madhya pradesh, indore, bhopal, gwalior, jabalpur]
+- id: tamil-nadu
+  name: Tamil Nadu
+  aliases: [tamil nadu, chennai, madras, coimbatore, madurai]
+- id: telangana
+  name: Telangana
+  aliases: [telangana, hyderabad, warangal]
+- id: rajasthan
+  name: Rajasthan
+  aliases: [rajasthan, jaipur, udaipur, jodhpur]
+- id: uttar-pradesh
+  name: Uttar Pradesh
+  aliases: [uttar pradesh, lucknow, noida, kanpur, ghaziabad, varanasi]
+- id: west-bengal
+  name: West Bengal
+  aliases: [west bengal, kolkata, calcutta]
