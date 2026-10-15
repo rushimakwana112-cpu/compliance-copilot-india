@@ -171,3 +171,15 @@ def test_new_chat_drops_the_answer_of_a_stopped_request():
     assert ask.index("if (chat !== ui.chat)") < ask.index("addBot(answer)") < ask.index("ui.history.push")
     new_chat = html.split('$("newChat").onclick')[1].split("};")[0]
     assert "ui.chat++" in new_chat
+
+
+def test_broken_pdf_upload_fails_cleanly(client, store, monkeypatch, tmp_path):
+    """A file that starts with %PDF but is corrupt: reported as failed in the sidebar, nothing indexed."""
+    from app import main
+
+    monkeypatch.setattr(main, "UPLOAD_DIR", tmp_path / "uploads")
+    r = client.post("/api/ingest/file", files={"file": ("Broken.pdf", b"%PDF-1.4\n%%garbage, no objects", "application/pdf")},
+                    data={"scope": "central"})
+    assert r.status_code == 200
+    docs = {d["name"]: d for d in client.get("/api/documents").json()}
+    assert docs["Broken"]["meta"].startswith("failed") and store.records == {}

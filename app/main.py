@@ -203,13 +203,11 @@ def create_app(services: Services | None = None) -> FastAPI:
             from ingest.download import download
 
             row = {"doc": name, "url": url, "scope": scope, "status": "current", "effective_date": "", "doc_type": "circular"}
-            dl = download(row)
+            dl = download(row, max_bytes=svc().settings.max_upload_mb * 1024 * 1024)
             if dl.path is None:
                 catalog.set_job(name, scope, dl.status)
             elif dl.path.suffix != ".pdf" or not dl.path.read_bytes()[:4] == b"%PDF":
                 catalog.set_job(name, scope, "failed: link is not a PDF")
-            elif dl.path.stat().st_size > svc().settings.max_upload_mb * 1024 * 1024:
-                catalog.set_job(name, scope, f"failed: larger than {svc().settings.max_upload_mb} MB")
             else:
                 _index_in_background(dl.path, row)
 
