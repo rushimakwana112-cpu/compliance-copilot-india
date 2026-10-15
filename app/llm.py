@@ -211,6 +211,7 @@ class GroqClient:
         self.api_key, self.model = api_key, model
         self.temperature, self.max_tokens, self.timeout, self.backoff = temperature, max_tokens, timeout, backoff
         self.max_rate_wait, self.sleep = max_rate_wait, sleep
+        self.json_mode_ok = True  # turned off after the model fails JSON mode once
         self._client = client
         self._health: tuple[float, dict[str, Any]] | None = None
 
@@ -236,14 +237,18 @@ class GroqClient:
         return kind(QUOTA_MESSAGE if window == "day" else BUSY_MESSAGE, limit=limit, retry_after=retry_after,
                     prompt_tokens=prompt_tokens)
 
-    def _call(self, fn: Callable[[], T], prompt_tokens: int | None = None) -> T:
-        """Run one SDK call with the error mapping, the single timeout retry and the single rate-limit retry."""
+    def _call(self, fn: Callable[[], T], prompt_tokens: int | None = None,
+              passthrough: tuple[type[Exception], ...] = ()) -> T:
+        """Run one SDK call with the error mapping, the single timeout retry and the single rate-limit retry.
+        Exceptions in `passthrough` reach the caller unchanged."""
         import groq
 
         timeouts = waits = 0
         while True:
             try:
                 return fn()
+            except passthrough:
+                raise
             except groq.RateLimitError as e:
                 err = self._rate_limit(e, prompt_tokens)
                 if isinstance(err, Busy) and waits == 0:
@@ -274,9 +279,26 @@ class GroqClient:
                 "max_tokens": self.max_tokens, **extra}
 
     def chat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
-        """Full reply. JSON mode uses Groq's `response_format` (the prompt must mention JSON, ours do)."""
-        extra = {"response_format": {"type": "json_object"}} if json_mode else {}
-        params = self._params(messages, **extra)
+        """Full reply. JSON mode uses Groq's `response_format` (the prompt must mention JSON, ours do).
+
+        Some models answer JSON mode with 400 "Failed to generate JSON" (json_validate_failed). Then the
+        call is repeated as plain text, the caller parses the text, and JSON mode stays off for this client.
+        """
+        import groq
+
+        if json_mode and self.json_mode_ok:
+            params = self._params(messages, response_format={"type": "json_object"})
+            try:
+                resp = self._call(lambda: self.client.chat.completions.create(**params), estimate_tokens(messages),
+                                  passthrough=(groq.BadRequestError,))
+                return resp.choices[0].message.content or ""
+            except groq.BadRequestError as e:
+                if "json" not in str(e).lower():
+                    raise LLMError(f"Groq error: {str(e)[:200]}") from e
+                log.warning("Groq model %s failed JSON mode (%s); using plain text from now on", self.model,
+                            str(e)[:120])
+                self.json_mode_ok = False
+        params = self._params(messages)
         resp = self._call(lambda: self.client.chat.completions.create(**params), estimate_tokens(messages))
         return resp.choices[0].message.content or ""
 

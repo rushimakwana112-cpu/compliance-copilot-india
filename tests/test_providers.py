@@ -151,6 +151,48 @@ def test_estimate_tokens():
     assert estimate_tokens([{"role": "user", "content": "a" * 400}, {"role": "system", "content": "b" * 4}]) == 101
 
 
+def json_failed() -> groq.BadRequestError:
+    body = {"message": "Failed to generate JSON. Please adjust your prompt. See 'failed_generation' for more details.",
+            "type": "invalid_request_error", "code": "json_validate_failed", "failed_generation": "route: sql"}
+    return groq.BadRequestError(f"Error code: 400 - {{'error': {body}}}",
+                                response=httpx.Response(400, request=REQ), body=body)
+
+
+def test_json_mode_400_falls_back_to_plain_text_and_stays_off():
+    sdk = FakeGroqSDK(json_failed(), reply("route: sql"), reply('{"route": "rag"}'))
+    client = groq_client(sdk)
+    assert client.chat([{"role": "user", "content": "Reply as JSON"}], json_mode=True) == "route: sql"
+    assert client.chat([{"role": "user", "content": "Reply as JSON"}], json_mode=True) == '{"route": "rag"}'
+    assert ["response_format" in c for c in sdk.calls] == [True, False, False]
+
+
+def test_other_400_is_an_llm_error():
+    bad = groq.BadRequestError("Error code: 400 - context too long", response=httpx.Response(400, request=REQ),
+                               body={"message": "context too long"})
+    with pytest.raises(LLMError, match="context too long"):
+        groq_client(FakeGroqSDK(bad)).chat([{"role": "user", "content": "x"}], json_mode=True)
+
+
+def test_router_parses_text_when_json_mode_fails():
+    from app.router import route_llm
+
+    llm = groq_client(FakeGroqSDK(json_failed(), reply("The route is: sql")))
+    assert route_llm(llm, "Which sample employees are above the ESIC limit?") == "sql"
+
+
+def test_sql_route_survives_json_mode_400(settings, tmp_path):
+    from app import sql_agent
+    from scripts.make_sample_db import build
+
+    db = tmp_path / "s.db"
+    build(db)
+    settings.db_path = db
+    sdk = FakeGroqSDK(reply("```sql\nSELECT emp_id, name FROM employees LIMIT 3\n```"))
+    out = sql_agent.run(Services(settings, groq_client(sdk), None), "List three of our employees", {})
+    assert out.type == "sql" and len(out.table.rows) == 3
+    assert "response_format" not in sdk.calls[0]
+
+
 def test_groq_timeout_retried_once():
     sdk = FakeGroqSDK(groq.APITimeoutError(request=REQ), reply("ok"))
     assert groq_client(sdk).chat([{"role": "user", "content": "hi"}]) == "ok"

@@ -174,7 +174,25 @@ Rules:
 - Never write legal thresholds as numbers. Use these named parameters instead:
   :esic_ceiling (ESIC wage ceiling), :eps_wage_ceiling (EPS wage ceiling), :gratuity_min_years (gratuity minimum service).
 - Numbers the user typed themselves may be written as literals.
-- Return JSON: {{"sql": "<query>"}}"""
+- Reply with only the query inside a ```sql code block. No explanation."""
+
+SQL_FENCE = re.compile(r"```(?:sql|sqlite)?\s*\n?(.*?)```", re.IGNORECASE | re.DOTALL)
+BARE_SELECT = re.compile(r"^\s*((?:WITH|SELECT)\b.*)", re.IGNORECASE | re.DOTALL | re.MULTILINE)
+
+
+def extract_sql(reply: str) -> str | None:
+    """The query from a model reply: a ```sql block, else JSON {"sql": …}, else text starting at SELECT/WITH.
+
+    Plain text, not JSON mode: some Groq models fail JSON mode with a 400 "Failed to generate JSON".
+    """
+    m = SQL_FENCE.search(reply)
+    if m and m.group(1).strip():
+        return m.group(1).strip()
+    value = (parse_json(reply) or {}).get("sql")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    m = BARE_SELECT.search(reply)
+    return m.group(1).strip().rstrip("`").strip() if m else None
 
 
 def generate(services: Services, question: str, error: str | None = None, previous: str | None = None) -> str:
@@ -183,9 +201,9 @@ def generate(services: Services, question: str, error: str | None = None, previo
     user = f"Examples:\n\n{shots}\n\nQ: {question}"
     if error:
         user += f"\n\nYour previous query was:\n{previous}\nIt failed with: {error}\nWrite a corrected query."
-    reply = services.llm.chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}], json_mode=True)
-    sql = (parse_json(reply) or {}).get("sql")
-    if not isinstance(sql, str) or not sql.strip():
+    reply = services.llm.chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}])
+    sql = extract_sql(reply)
+    if not sql:
         raise SQLGuardError("model did not return SQL")
     return sql
 
