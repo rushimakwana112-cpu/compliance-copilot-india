@@ -226,19 +226,29 @@ Follow-ups are rewritten into a standalone question only when they clearly are o
 python -m eval.run --sweep 0.34,0.38,0.42,0.47
 ```
 
-| Metric | Result |
+<!-- eval-results:start (scripts/run_all.ps1 rewrites this block from eval/report.md) -->
+| Metric | Value |
 |---|---|
-| Route accuracy | _run the eval_ |
-| Retrieval hit@4 | _run the eval_ |
-| Answer contains | _run the eval_ |
-| not_found precision / recall | _run the eval_ |
-| Median latency | _run the eval_ |
+| route accuracy | 100% |
+| retrieval hit@4 | 92% |
+| answer contains | 91% |
+| not_found precision | 83% |
+| not_found recall | 100% |
+| median latency | 1.9 s |
+
+Note: measured on 26 questions, 7 skipped because their documents aren't indexed yet; small sample, so treat as indicative. I'll update after re-running.
+<!-- eval-results:end -->
 
 **Why the Pinecone threshold is only 0.38.** With `llama-text-embed-v2`, similarity scores for relevant and irrelevant questions overlap. In real tests, *"What is a fixed term employee?"* scored 0.43 although the Code defines the term, while *"Gratuity rule in Dubai?"* scored above 0.47 and was refused correctly by the model. No single threshold separates those, so the threshold now only blocks clear nonsense and the real guards are elsewhere: questions about foreign places are refused before retrieval, a chunk that defines the question's term is always sent to the model, and the model must answer exactly NOT_FOUND when the passages don't answer the question.
 
 **Re-tune after switching embedding models.** `llama-text-embed-v2` and `bge-m3` score on different scales, so a threshold that works for one can refuse too much, or too little, with the other. Run the sweep once per mode.
 
 **Tuning log** (fill in as you tune): which `SCORE_THRESHOLD` and chunk size you started with, what the sweep showed, and what you changed. Defaults: threshold 0.38 for Pinecone embeddings and 0.55 for bge-m3; one chunk per defined term in Definitions sections (up to ~3,000 characters), other chunks up to ~1,800 characters with 200 overlap, cut only between sub-clauses; Schedules and end matter (Statement of Objects and Reasons, Notes on Clauses) get their own labels, and end matter is indexed as `commentary` and ranked 0.10 lower; top_k 12 → re-rank → keep 5, each with up to 600 characters of its neighbouring chunks on each side, capped at ~3,000 prompt tokens. Answers list only the passages they cite; the rest appear under "Other passages searched".
+
+## Known free-tier limits
+
+- **Render sleeps after 15 minutes idle.** The first request after that wakes the server, which can take up to a minute; the page shows *"Waking up the server…"* meanwhile.
+- **Groq's free limits.** The free tier caps tokens and requests per minute and per day. Under load an answer can be *"Busy right now, please retry in a minute"* (a per-minute limit; it clears by itself) or *"Daily demo limit reached"* (try again the next day).
 
 ## Limitations
 
