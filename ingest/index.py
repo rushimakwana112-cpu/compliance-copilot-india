@@ -48,10 +48,17 @@ def build_records(doc: str, chunks: list[Chunk], meta: dict[str, str]) -> list[d
             "embed_text": "\n".join(x for x in (c.chapter, c.section, c.text) if x),
             "metadata": {"doc": doc, "section": c.section, "page": int(c.page), "chunk_no": c.chunk_no,
                          "chapter": c.chapter, "heading": c.heading, "term": c.term,
-                         **{k: meta.get(k, "") for k in META_FIELDS}},
+                         **{k: meta.get(k, "") for k in META_FIELDS}, "status": chunk_status(c, meta)},
         }
         for c in chunks
     ]
+
+
+def chunk_status(c: Chunk, meta: dict[str, str]) -> str:
+    """End matter of a current Act (Statement of Objects and Reasons, Notes on Clauses) is 'commentary':
+    it explains the law but is not the law, so retrieval ranks it below the operative text."""
+    status = meta.get("status", "") or "current"
+    return "commentary" if c.kind == "commentary" and status == "current" else status
 
 
 def stale_ids(store: VectorStore, doc: str) -> list[str]:

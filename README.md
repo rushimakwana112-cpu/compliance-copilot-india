@@ -235,7 +235,7 @@ python -m eval.run --sweep 0.34,0.38,0.42,0.47
 
 **Re-tune after switching embedding models.** `llama-text-embed-v2` and `bge-m3` score on different scales, so a threshold that works for one can refuse too much, or too little, with the other. Run the sweep once per mode.
 
-**Tuning log** (fill in as you tune): which `SCORE_THRESHOLD` and chunk size you started with, what the sweep showed, and what you changed. Defaults: threshold 0.38 for Pinecone embeddings and 0.55 for bge-m3; one chunk per defined term in Definitions sections (up to ~3,000 characters), other chunks up to ~1,800 characters with 200 overlap, cut only between sub-clauses; top_k 12 → re-rank → keep 5, each with its neighbouring chunks.
+**Tuning log** (fill in as you tune): which `SCORE_THRESHOLD` and chunk size you started with, what the sweep showed, and what you changed. Defaults: threshold 0.38 for Pinecone embeddings and 0.55 for bge-m3; one chunk per defined term in Definitions sections (up to ~3,000 characters), other chunks up to ~1,800 characters with 200 overlap, cut only between sub-clauses; Schedules and end matter (Statement of Objects and Reasons, Notes on Clauses) get their own labels, and end matter is indexed as `commentary` and ranked 0.10 lower; top_k 12 → re-rank → keep 5, each with its neighbouring chunks. Answers list only the passages they cite; the rest appear under "Other passages searched".
 
 ## Limitations
 

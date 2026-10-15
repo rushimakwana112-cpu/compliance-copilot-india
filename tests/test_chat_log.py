@@ -34,7 +34,7 @@ def test_llm_not_found_still_logs_scores(services, seeded, llm, endpoint):
     assert len(rec["retrieved"]) == 7 and {"doc", "section", "score"} == set(rec["retrieved"][0])
     assert rec["retrieved"][0]["section"].startswith("Section ")
     assert rec["index"] == services.settings.pinecone_index
-    assert rec["filters"] == [{"status": "current", "scope": {"$in": ["central", "gujarat"]}}]
+    assert rec["filters"] == [{"status": {"$in": ["current", "commentary"]}, "scope": {"$in": ["central", "gujarat"]}}]
     assert rec["retrieval"] == "searched"
 
 

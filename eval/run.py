@@ -6,7 +6,7 @@ PowerShell:
 
 Metrics
     route accuracy     the router picked the expected path (not_found questions: rag, or refused up front as out_of_scope)
-    retrieval hit@4    the expected document is among the first 4 citations (rag questions)
+    retrieval hit@4    the expected document is among the first 4 passages, cited ones first (rag questions)
     answer contains    the answer contains the expected phrases (a|b = any of, a&b = all of; case-insensitive)
     not_found prec.    of the answers that refused, how many were supposed to refuse
     not_found recall   of the trick questions, how many were refused
@@ -76,7 +76,7 @@ def score(row: Row, route: str, resp: ChatResponse) -> dict[str, bool | None]:
     text = resp.answer + " " + " ".join(" ".join(r) for r in (resp.table.rows if resp.table else []))
     return {
         "route": route == expected_route or (row.type == "not_found" and route == "out_of_scope"),
-        "hit@4": _any_in(row.expected_doc, " ".join(c.doc for c in resp.citations[:4]))
+        "hit@4": _any_in(row.expected_doc, " ".join(c.doc for c in [*resp.citations, *resp.other_citations][:4]))
         if row.type == "rag" and row.expected_doc else None,
         "contains": _contains(row.expected_answer_contains, text) if row.expected_answer_contains else None,
         "refused": resp.type == "not_found",

@@ -9,7 +9,7 @@ import pytest
 from app import catalog
 from ingest.chunk import MAX_CHARS, OVERLAP, chunk_pages, split_text
 from ingest.cleanup import fix_split_words
-from ingest.index import vector_id
+from ingest.index import build_records, vector_id
 from ingest.parse import Page, parse_html, parse_pdf
 from ingest.run import ingest_file
 
@@ -95,6 +95,15 @@ def test_end_matter_is_labelled_and_marked_commentary():
     assert {c.kind for c in chunks if c.page == 96} == {"body"}
     assert {c.section for c in chunks if c.page == 96} >= {"Section 163 · Power to remove difficulties",
                                                           "Section 164 · Repeal and savings"}
+
+
+def test_end_matter_is_indexed_as_commentary_only_for_a_current_act():
+    chunks = chunk_pages(SS_TAIL)
+    status = {r["metadata"]["section"]: r["metadata"]["status"] for r in build_records(META["doc"], chunks, META)}
+    assert status["Statement of Objects and Reasons"] == status["Notes on Clauses"] == "commentary"
+    assert status["First Schedule (see section 53)"] == status["Section 164 · Repeal and savings"] == "current"
+    old = build_records("Payment of Gratuity Act, 1972", chunks, {**META, "status": "repealed"})
+    assert {r["metadata"]["status"] for r in old} == {"repealed"}  # a repealed Act stays repealed throughout
 
 
 @pytest.mark.parametrize("heading, label", [

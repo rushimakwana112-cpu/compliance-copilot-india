@@ -263,6 +263,12 @@ select {
   border: 1px solid var(--line); background: transparent; color: var(--muted); max-width: 100%;
 }
 .cite:hover, .cite[aria-pressed="true"] { border-color: var(--accent); color: var(--text); }
+/* Retrieved but not cited: collapsed, so the answer shows only its real sources. */
+.others { font-size: 12.5px; color: var(--muted); }
+.others summary { cursor: pointer; min-height: 28px; display: inline-flex; align-items: center; }
+.others summary:hover { color: var(--text); }
+.others ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 2px; }
+.others .src { opacity: .8; padding-top: 10px; }
 .table-wrap { overflow-x: auto; max-width: 100%; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .answer table { margin: 0 0 10px; }
@@ -784,7 +790,7 @@ const BADGE = {
 function metaRow(a) {
   const extra = a.type === "tool" && a.tool ? `<span class="mono">${esc(a.tool)}</span>`
               : a.type === "sql" && a.rows_scanned != null ? `<span>${esc(a.rows_scanned)} rows scanned</span>`
-              : a.type === "rag" ? `<span>${(a.citations || []).length} passages</span>` : "";
+              : a.type === "rag" ? `<span>${(a.citations || []).length} cited${(a.other_citations || []).length ? ` · ${a.other_citations.length} more searched` : ""}</span>` : "";
   const scope = a.scope ? `<span>· ${esc(scopeLabel(a.scope))}</span>` : "";
   return `<div class="meta-row">${BADGE[a.type] || ""}${extra}${scope}</div>`;
 }
@@ -811,6 +817,10 @@ function addBot(a) {
   if (a.note) html += `<div class="note">${esc(a.note)}</div>`;
   if (nC) {
     html += `<div class="cites">${a.citations.map((c, i) => `<button type="button" class="cite" data-i="${i}" aria-pressed="false">[${i + 1}] ${esc(c.doc)}${c.section ? " · " + esc(c.section) : ""}${c.page ? " · p. " + esc(c.page) : ""}</button>`).join("")}</div>`;
+  }
+  const others = a.other_citations || [];
+  if (others.length) {
+    html += `<details class="others"><summary>Other passages searched (${others.length})</summary><ul>${others.map((c) => `<li>${citeLine(c)}</li>`).join("")}</ul></details>`;
   }
   const route = ROUTE_LABEL[a.type] || a.type;
   const speed = a.latency_ms != null ? ` · ${(a.latency_ms / 1000).toFixed(1)} s` : "";
@@ -842,6 +852,20 @@ function addBot(a) {
   scrollDown();
 }
 
+function citeLine(c) {
+  return `${esc(c.doc)}${c.section ? " · " + esc(c.section) : ""}${c.page ? " · p. " + esc(c.page) : ""}`;
+}
+function srcCard(c, num, hl, id) {
+  return `
+    <div class="src ${hl ? "hl" : ""}"${id ? ` id="${id}"` : ""}>
+      <div class="src-head"><b>${num}${esc(c.doc)}</b><span style="color:var(--muted)">${c.page ? "p. " + esc(c.page) : ""}</span></div>
+      ${c.section ? `<div class="note">${esc(c.section)}${c.status === "commentary" ? " · commentary, not operative law" : ""}</div>` : ""}
+      ${c.snippet ? `<div class="src-snippet">${esc(c.snippet)}</div>` : ""}
+      ${c.score != null ? `<div class="score"><div class="bar"><i style="width:${Math.max(0, Math.min(100, Math.round(c.score * 100)))}%"></i></div><span class="mono">${Number(c.score).toFixed(2)}</span></div>` : ""}
+      ${/^https:\/\//.test(c.url || "") ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">Open official document ↗</a>` : ""}
+    </div>`;
+}
+
 function selectAnswer(id, highlight) {
   ui.activeId = id;
   document.querySelectorAll(".msg.bot").forEach((m) => m.classList.toggle("active", m.dataset.id === id));
@@ -855,15 +879,10 @@ function selectAnswer(id, highlight) {
     list.innerHTML = `<div class="src-empty">${a && a.type === "not_found" ? "Nothing relevant was found, so the copilot refused to guess." : "No sources for this answer."}</div>`;
     return;
   }
-  $("srcFor").textContent = a.type === "tool" ? "Where the calculator's rates come from" : "Passages used for the selected answer";
-  list.innerHTML = a.citations.map((c, i) => `
-    <div class="src ${i === highlight ? "hl" : ""}" id="src-${i}">
-      <div class="src-head"><b>[${i + 1}] ${esc(c.doc)}</b><span style="color:var(--muted)">${c.page ? "p. " + esc(c.page) : ""}</span></div>
-      ${c.section ? `<div class="note">${esc(c.section)}</div>` : ""}
-      ${c.snippet ? `<div class="src-snippet">${esc(c.snippet)}</div>` : ""}
-      ${c.score != null ? `<div class="score"><div class="bar"><i style="width:${Math.max(0, Math.min(100, Math.round(c.score * 100)))}%"></i></div><span class="mono">${Number(c.score).toFixed(2)}</span></div>` : ""}
-      ${/^https:\/\//.test(c.url || "") ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">Open official document ↗</a>` : ""}
-    </div>`).join("");
+  $("srcFor").textContent = a.type === "tool" ? "Where the calculator's rates come from" : "Passages the selected answer cites";
+  const others = a.other_citations || [];
+  list.innerHTML = a.citations.map((c, i) => srcCard(c, `[${i + 1}] `, i === highlight, "src-" + i)).join("")
+    + (others.length ? `<details class="others"><summary>Other passages searched (${others.length})</summary>${others.map((c) => srcCard(c, "", false, "")).join("")}</details>` : "");
   if (highlight !== null) { const s = $("src-" + highlight); if (s) s.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
 }
 

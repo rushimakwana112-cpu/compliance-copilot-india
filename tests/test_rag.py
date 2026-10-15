@@ -304,3 +304,62 @@ def test_coverage_question_also_gets_the_applicability_section(services, store, 
     assert applicability and applicability[0].pinned
     system, user = llm.calls[-1][0]["content"], llm.calls[-1][1]["content"]
     assert "which establishments the provisions apply to" in system and "every factory, mine" in user
+
+
+# ----------------------------------------------------------------- end matter and cited-only citations
+SALIENT = GRATUITY + " as a salient feature of the Code"
+
+
+def seed_commentary(store):
+    store.add(GRATUITY, doc="Code on Social Security, 2020", section="Section 53", page=40, scope="central",
+              status="current", doc_type="act", chunk_no=1)
+    store.add(SALIENT, doc="Code on Social Security, 2020", section="Statement of Objects and Reasons", page=111,
+              scope="central", status="commentary", doc_type="act", chunk_no=9)
+
+
+def test_commentary_is_searched_but_ranked_below_operative_text(services, store):
+    seed_commentary(store)
+    question = "gratuity fixed term employee salient feature"
+    passages = rag.retrieve(services, question, Scope(["gujarat"], "default"))
+    by_section = {p.section: p for p in passages}
+    salient, sec53 = by_section["Statement of Objects and Reasons"], by_section["Section 53"]
+    assert salient.score > sec53.score  # the end matter is the closer match on similarity alone…
+    assert salient.rank_score == pytest.approx(salient.score - rag.COMMENTARY_PENALTY)
+    assert passages[0].section == "Section 53"  # …but the operative section ranks first
+
+
+def test_commentary_is_labelled_not_repealed(services, store, llm):
+    seed_commentary(store)
+    llm.responder = lambda m, j: "Yes, fixed term employees get gratuity [1]."
+    resp, _ = rag.answer(services, "gratuity fixed term employee salient feature", Scope(["gujarat"], "default"))
+    prompt = llm.calls[0][1]["content"]
+    assert "Statement of Objects and Reasons · p. 111 · Central · COMMENTARY (not operative law)" in prompt
+    assert "REPEALED" not in prompt and resp.note is None
+
+
+def test_renumber_keeps_only_cited_passages_in_order():
+    assert rag.renumber("A [3]. B [1, 3]. C [3][1].", 4) == ("A [1]. B [1, 2]. C [1][2].", [3, 1])
+    assert rag.renumber("No markers here.", 3) == ("No markers here.", [1, 2, 3])
+
+
+def test_answer_lists_cited_passages_and_collapses_the_rest(services, store, llm):
+    seed(store)
+    for i in range(3):
+        store.add(f"gratuity fixed term employee filler passage number {i}", doc=f"Filler {i}", page=i + 1,
+                  scope="central", status="current", doc_type="act")
+    llm.responder = lambda m, j: "Fixed term employees qualify [3], without five years [3][1]."
+    resp, passages = rag.answer(services, "gratuity for fixed term employee", Scope(["gujarat"], "default"))
+    assert resp.answer == "Fixed term employees qualify [1], without five years [1][2]."
+    assert [c.doc for c in resp.citations] == [passages[2].doc, passages[0].doc]
+    assert {c.doc for c in resp.other_citations} == {p.doc for p in passages} - {passages[0].doc, passages[2].doc}
+    assert len(resp.citations) + len(resp.other_citations) == len(passages)
+
+
+def test_streamed_answer_is_renumbered_in_done(services, store, llm):
+    seed(store)
+    store.add("gratuity fixed term employee another passage", doc="Other doc", page=2, scope="central",
+              status="current", doc_type="act")
+    llm.responder = lambda m, j: "Yes [2]."
+    events = list(rag.stream(services, "gratuity for fixed term employee", Scope(["gujarat"], "default")))
+    done = dict(events)["done"]
+    assert done.answer == "Yes [1]." and len(done.citations) == 1 and done.other_citations

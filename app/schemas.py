@@ -67,7 +67,9 @@ class ChatResponse(BaseModel):
     type: Route
     answer: str
     scope: ScopeOut | None = None
-    citations: list[Citation] = Field(default_factory=list)
+    citations: list[Citation] = Field(default_factory=list)  # the sources the answer cites, as [1], [2]…
+    # Passages that were retrieved and sent to the model but not cited ("Other passages searched").
+    other_citations: list[Citation] = Field(default_factory=list)
     table: Table | None = None
     tool: str | None = None
     sql: str | None = None

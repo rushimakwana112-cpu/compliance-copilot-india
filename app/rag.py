@@ -25,6 +25,9 @@ DOC_TYPE_BOOST = 0.03
 DOC_NAME_BOOST = 0.08  # the question names this document ("under the Code on Wages")
 TERM_BOOST = 0.08  # "definition of wages" and this chunk defines "wages"
 HEADING_BOOST = 0.05  # the chunk's chapter or heading is about the question's topic
+COMMENTARY_PENALTY = 0.10  # end matter (Statement of Objects and Reasons…) ranks below the operative text
+SEARCHED = ("current", "commentary")  # statuses searched by default; repealed laws only when asked
+OLD = {"repealed", "historical"}
 SNIPPET_CHARS = 320
 NEIGHBOUR_CHARS = 900  # how much of the previous / next chunk is added around each passage
 NOT_FOUND = "NOT_FOUND"
@@ -281,6 +284,8 @@ class Signals:
         where = f"{p.chapter} {p.heading} {p.section}".lower()
         if any(re.search(t, where) for t in self.topics):
             b += HEADING_BOOST
+        if p.status == "commentary":
+            b -= COMMENTARY_PENALTY
         return b
 
 
@@ -353,7 +358,7 @@ def retrieve(services: Services, question: str, scope: Scope, trace: Trace | Non
     trace.index = trace.index or s.pinecone_index
     if services.store is None:
         raise SearchError(services.store_error or "Pinecone is not configured")
-    statuses = ("current", "repealed", "historical") if REPEALED_HINT.search(question) else ("current",)
+    statuses = (*SEARCHED, "repealed", "historical") if REPEALED_HINT.search(question) else SEARCHED
     signals = Signals.of(question)
     per_state_keep = s.keep_k if len(scope.states) == 1 else max(2, s.keep_k - 2)
     kept: dict[tuple, Passage] = {}
@@ -426,6 +431,8 @@ def _applicability_passages(services: Services, question: str, scope: Scope, sta
     for m in matches:
         p = _passage(m.metadata, m.score, signals)
         where = f"{p.chapter} {p.heading} {p.section} {p.text}"
+        if p.status == "commentary":
+            continue  # "the Code applies to…" in the Statement of Objects and Reasons is not the law itself
         if re.search(text_pat, where, re.IGNORECASE) and APPLIES.search(where) and ESTABLISHMENT.search(p.text):
             trace.add(m.id, m.score, m.metadata)
             p.pinned = True
@@ -464,7 +471,8 @@ Answer ONLY from the numbered passages. Rules:
 2. Cite every claim with the passage number in square brackets, like [1] or [2]. Only use numbers of passages you were given.
 3. Never state a rate, ceiling, slab or amount that is not written in the passages. Do not do arithmetic.
 4. If passages conflict, prefer the one with the latest effective date and say that you did.
-5. If you rely on a passage marked REPEALED, say clearly that the Act has been repealed.
+5. If you rely on a passage marked REPEALED, say clearly that the Act has been repealed. A passage marked
+COMMENTARY explains why the law was made; answer from the operative sections when they cover the question.
 6. If the passages do not answer the question, reply with exactly: NOT_FOUND
 You may use **bold**, short bullet lists and markdown tables. No headings."""
 
@@ -477,6 +485,12 @@ COMPARE_RULE = """The question compares states. Answer with a markdown table tha
 Then add one summary sentence."""
 
 
+def status_mark(status: str) -> str:
+    if status in OLD:
+        return "REPEALED"
+    return "COMMENTARY (not operative law)" if status == "commentary" else ""
+
+
 def build_messages(question: str, passages: list[Passage], scope: Scope) -> list[dict[str, str]]:
     """System prompt + numbered passages. Passage order = citation numbers."""
     blocks = []
@@ -484,7 +498,7 @@ def build_messages(question: str, passages: list[Passage], scope: Scope) -> list
         head = " · ".join(x for x in (p.doc, p.section, f"p. {p.page}" if p.page else "",
                                       f"effective {p.effective_date}" if p.effective_date else "",
                                       "Central" if p.scope == "central" else p.scope.title(),
-                                      "REPEALED" if p.status != "current" else "") if x)
+                                      status_mark(p.status)) if x)
         blocks.append(f"[{i}] {head}\n{p.context or p.text}")
     system = SYSTEM_PROMPT + f"\nJurisdiction searched: {scope.label()}."
     if coverage_topic(question):
@@ -533,19 +547,50 @@ def not_found(scope: Scope, best: float | None = None) -> ChatResponse:
 
 def repealed_note(answer: str, passages: list[Passage]) -> str | None:
     used = cited_numbers(answer)
-    old = sorted({f"{p.doc} ({p.status})" for i, p in enumerate(passages, 1) if i in used and p.status != "current"})
+    old = sorted({f"{p.doc} ({p.status})" for i, p in enumerate(passages, 1) if i in used and p.status in OLD})
     if not old:
         return None
     return f"This answer cites {', '.join(old)}. The Labour Codes replaced it; check the current Code before relying on it."
 
 
+def renumber(answer: str, n_passages: int) -> tuple[str, list[int]]:
+    """Number cited passages 1, 2, 3… in the order the answer first cites them.
+
+    Returns the rewritten answer and the old passage numbers in their new order:
+    'A [3]. B [1, 3].' → ('A [1]. B [1, 2].', [3, 1]). With no markers, nothing changes.
+    """
+    order: list[int] = []
+    for m in CITE.finditer(answer):
+        for x in m.group(1).split(","):
+            n = int(x)
+            if 1 <= n <= n_passages and n not in order:
+                order.append(n)
+    if not order:
+        return answer, list(range(1, n_passages + 1))
+    new = {old: i for i, old in enumerate(order, 1)}
+
+    def fix(m: re.Match[str]) -> str:
+        nums = sorted({new[int(x)] for x in m.group(1).split(",") if int(x) in new})
+        return "[" + ", ".join(map(str, nums)) + "]"
+
+    return CITE.sub(fix, answer), order
+
+
 def finish(raw: str, passages: list[Passage], scope: Scope) -> ChatResponse:
-    """Turn the model's raw text into the API response."""
+    """Turn the model's raw text into the API response.
+
+    Only the passages the answer cites are listed as citations, renumbered in the order they are
+    first cited; the rest go to `other_citations` (shown collapsed as "Other passages searched").
+    """
     if is_not_found(raw):
         return not_found(scope)
     text = clean_citations(raw, len(passages))
-    return ChatResponse(type="rag", answer=text, scope=_scope_out(scope),
-                        citations=[p.citation() for p in passages], note=repealed_note(text, passages))
+    note = repealed_note(text, passages)
+    text, order = renumber(text, len(passages))
+    cited = [passages[i - 1].citation() for i in order]
+    others = [p.citation() for i, p in enumerate(passages, 1) if i not in order]
+    return ChatResponse(type="rag", answer=text, scope=_scope_out(scope), citations=cited,
+                        other_citations=others, note=note)
 
 
 def prepare(services: Services, question: str, scope: Scope,
