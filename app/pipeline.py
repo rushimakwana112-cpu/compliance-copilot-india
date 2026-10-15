@@ -12,6 +12,7 @@ are written in that language.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -19,7 +20,7 @@ from typing import Any
 
 from datetime import date
 
-from app import guards, labour, lang, logs, rag, salary, sql_agent, tax, tools
+from app import faq, guards, labour, lang, logs, rag, salary, sql_agent, tax, tools, verify
 from app.jurisdiction import Scope, detect_states, foreign_place, resolve
 from app.llm import LLMError, RateLimited
 from app.router import route
@@ -39,6 +40,7 @@ class Turn:
     route: str
     trace: rag.Trace = field(default_factory=rag.Trace)  # retrieval details for the log
     lang: str = "en"  # the language to answer in
+    claim: float | None = None  # "is this correct? … = 2,160": the user's figure to compare
 
     @property
     def cache_key(self) -> str:
@@ -72,11 +74,16 @@ def out_of_scope(services: Services, req: ChatRequest) -> tuple[Turn, ChatRespon
     )
 
 
-def understand(services: Services, req: ChatRequest) -> tuple[ChatRequest, str]:
-    """The message in plain English (short forms expanded, Hindi/Gujarati translated) and the language to answer in."""
+def understand(services: Services, req: ChatRequest) -> tuple[ChatRequest, str, float | None]:
+    """The message in plain English (short forms expanded, Hindi/Gujarati translated), the language to answer in,
+    and the user's own figure when they ask to check a calculation."""
     which = lang.detect(req.message)
     text = lang.to_english(services.llm, req.message, which)
-    return (req.model_copy(update={"message": text}) if text != req.message else req), which
+    claim = None
+    if (checked := verify.split(text)) is not None:
+        text, claim = checked
+        text = text if re.match(r"\s*calculate\b", text, re.I) else f"Calculate {text}"  # route it to the calculators
+    return (req.model_copy(update={"message": text}) if text != req.message else req), which, claim
 
 
 def early(services: Services, req: ChatRequest, which: str) -> tuple[Turn, ChatResponse] | None:
@@ -96,14 +103,20 @@ def early(services: Services, req: ChatRequest, which: str) -> tuple[Turn, ChatR
         resp = labour.run(text, None, today)
     elif salary.wants(text, history):
         resp = salary.run(text, history, scope.primary, None, today)
+    route_ = "tool"
+    if (resp is None or (resp.type == "guide" and not faq.AMOUNT.search(text))) and (entry := faq.match(text)) is not None:
+        # "What is the difference between CTC and gross?" is an explanation, not a calculation waiting for figures
+        resp, route_ = faq.answer(entry, None, today), "guide"
     if resp is None:
         return None
     resp.scope = _scope_out(scope)
-    return Turn(text, text, scope, "tool", trace, which), resp
+    return Turn(text, text, scope, route_, trace, which), resp
 
 
 def finish(services: Services, turn: Turn, resp: ChatResponse) -> ChatResponse:
     """Add the advisor pointer and write fixed answers in the user's language (RAG answers already are)."""
+    if turn.claim is not None and (line := verify.compare(resp, turn.claim)):
+        resp.answer = f"{line}\n\n{resp.answer}"
     note = guards.advice_note(turn.message)
     if note and note not in resp.answer and resp.type in ("rag", "tool", "guide"):
         resp.answer = f"{resp.answer}\n\n{note}"
@@ -163,18 +176,18 @@ def _cached(services: Services, turn: Turn, t0: float) -> ChatResponse | None:
 def handle(services: Services, req: ChatRequest, *, log: bool = True, use_cache: bool = True) -> tuple[ChatResponse, Turn]:
     """Answer one message (non-streaming). Repeated questions come from the answer cache."""
     t0 = time.perf_counter()
-    req, which = understand(services, req)
+    req, which, claim = understand(services, req)
     if (guarded := out_of_scope(services, req) or early(services, req, which)) is not None:
         turn, resp = guarded
-        turn.lang = which
+        turn.lang, turn.claim = which, claim
         resp = finish(services, turn, resp)
         resp.latency_ms = int((time.perf_counter() - t0) * 1000)
         if log:
             _log(turn, resp)
         return resp, turn
     turn = plan(services, req)
-    turn.lang = which
-    hit = _cached(services, turn, t0) if use_cache else None
+    turn.lang, turn.claim = which, claim
+    hit = _cached(services, turn, t0) if use_cache and claim is None else None
     if hit is not None:
         if log:
             _log(turn, hit)
@@ -187,7 +200,7 @@ def handle(services: Services, req: ChatRequest, *, log: bool = True, use_cache:
         resp = _llm_down(turn, e)
     resp = finish(services, turn, resp)
     resp.latency_ms = int((time.perf_counter() - t0) * 1000)
-    if use_cache:
+    if use_cache and claim is None:
         services.cache.put(turn.cache_key, turn.scope.states, resp)
     if log:
         _log(turn, resp)
@@ -197,10 +210,10 @@ def handle(services: Services, req: ChatRequest, *, log: bool = True, use_cache:
 def handle_stream(services: Services, req: ChatRequest) -> Iterator[tuple[str, dict[str, Any]]]:
     """Yield SSE events: `meta` (route + scope), `token`* (RAG only), then `done` with the full response."""
     t0 = time.perf_counter()
-    req, which = understand(services, req)
+    req, which, claim = understand(services, req)
     if (guarded := out_of_scope(services, req) or early(services, req, which)) is not None:
         turn, resp = guarded
-        turn.lang = which
+        turn.lang, turn.claim = which, claim
         resp = finish(services, turn, resp)
         resp.latency_ms = int((time.perf_counter() - t0) * 1000)
         _log(turn, resp)
@@ -212,9 +225,9 @@ def handle_stream(services: Services, req: ChatRequest) -> Iterator[tuple[str, d
     except LLMError as e:  # plan() already falls back on errors; this is a last resort
         yield "done", _llm_down(None, e).model_dump(exclude_none=True)
         return
-    turn.lang = which
+    turn.lang, turn.claim = which, claim
     yield "meta", {"route": turn.route, "scope": _scope_out(turn.scope).model_dump(exclude_none=True)}
-    hit = _cached(services, turn, t0)
+    hit = _cached(services, turn, t0) if claim is None else None
     if hit is not None:  # no tokens to stream: the whole answer arrives with `done`
         _log(turn, hit)
         yield "done", hit.model_dump(exclude_none=True)
@@ -237,6 +250,7 @@ def handle_stream(services: Services, req: ChatRequest) -> Iterator[tuple[str, d
         resp = _llm_down(turn, e)
     resp = finish(services, turn, resp)
     resp.latency_ms = int((time.perf_counter() - t0) * 1000)
-    services.cache.put(turn.cache_key, turn.scope.states, resp)
+    if claim is None:
+        services.cache.put(turn.cache_key, turn.scope.states, resp)
     _log(turn, resp)
     yield "done", resp.model_dump(exclude_none=True)

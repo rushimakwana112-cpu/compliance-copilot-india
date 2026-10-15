@@ -53,7 +53,7 @@ PARENTS_SENIOR = re.compile(r"\bparents?\b[^.]{0,30}\bsenior\b|\bsenior (?:citiz
 def wants(text: str) -> bool:
     if deadlines.is_deadline_question(text) and not re.search(r"\b(?:calculate|how much|tax on)\b", text, re.I):
         return False
-    return bool(TAX_INTENT.search(text))
+    return bool(TAX_INTENT.search(re.sub(r"\bprofessional tax\b|\bprofession tax\b", " ", text, flags=re.I)))
 
 
 @dataclass

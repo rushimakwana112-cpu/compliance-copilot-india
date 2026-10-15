@@ -1,0 +1,203 @@
+# Fixed explanations for common payroll questions whose source documents are not in the search index.
+# Answered by app/faq.py when the message matches a pattern and gives no amount (amounts go to a calculator).
+#
+#   patterns: regular expressions (case-insensitive); any one matching is enough
+#   answer:   the text. Figures that are in data/rates.yaml are written as placeholders and filled
+#             with the value valid today: {pct:pf.employee_rate}, {inr:pf.wage_ceiling}, {num:leave.min_days_worked}.
+#             Any other figure must come from the official source listed under `sources`.
+#   sources:  official documents the answer is based on (shown as citations)
+#
+# Topics answered from the indexed Acts (definition of wages, gratuity eligibility, bonus limits, ESIC
+# coverage, overtime) are left to the search so the answer quotes the Act itself.
+
+- id: ctc_gross_net
+  patterns: ['\b(?:ctc|cost to company)\b.{0,40}\b(?:gross|net|in-hand|take[- ]home|difference)\b', '\bdifference between (?:gross|net) (?:and|&) (?:gross|net|ctc)\b', '\bwhat is (?:ctc|gross salary|net salary)\b']
+  answer: |
+    - **CTC (cost to company)**: everything the employer spends on you in a year: gross salary plus the employer's PF, ESIC (if applicable), gratuity provision, insurance and any variable pay.
+    - **Gross salary**: CTC minus the employer's contributions. It is basic + DA + HRA + allowances, before your deductions.
+    - **Net (in-hand) salary**: gross minus your deductions: employee PF ({pct:pf.employee_rate} of PF wages), employee ESIC ({pct:esic.employee_rate} of gross, if gross is up to {inr:esic.wage_ceiling}/month), Professional Tax and TDS.
+
+    Tell me your CTC (e.g. "My CTC is ₹6 lakh a year, what is my in-hand?") and I'll work it out step by step.
+  sources:
+    - {doc: "Code on Social Security, 2020", section: "s.2(89) wages; Chapter III (PF) and IV (ESI)", url: "https://www.labour.gov.in/static/uploads/2025/07/b0620548445580767b5c0d18c95c26f7.pdf"}
+
+- id: salary_components
+  patterns: ['\b(?:what (?:is|are)|explain|meaning of)\b.{0,15}\b(?:basic|hra|house rent allowance|dearness allowance|\bda\b|special allowance|conveyance(?: allowance)?|salary components?|salary structure)\b']
+  answer: |
+    - **Basic**: the fixed core of your pay. PF, gratuity and (usually) HRA are worked out on it.
+    - **DA (dearness allowance)**: an inflation allowance; counted with basic as "wages" for PF, gratuity and bonus.
+    - **HRA**: house rent allowance. In the old tax regime part of it is tax-free if you pay rent: the least of HRA received, rent minus {pct:income_tax.hra_rent_excess_rate} of basic + DA, or {pct:income_tax.hra_metro_rate} of basic + DA (Mumbai, Kolkata, Delhi, Chennai, Hyderabad, Pune, Ahmedabad, Bengaluru) / {pct:income_tax.hra_other_rate} elsewhere.
+    - **Special allowance**: a balancing component; fully taxable.
+    - **Conveyance**: travel allowance; taxable unless a specific exemption applies.
+
+    Under the Labour Codes, "wages" = basic + DA + retaining allowance; if the excluded allowances (HRA, conveyance and others) are more than half of total pay, the excess is added back to wages.
+  sources:
+    - {doc: "Code on Wages, 2019", section: "s.2(y)", url: "https://www.labour.gov.in/static/uploads/2025/06/c328da14bbb15fc4ad571dc33e7a4ab3.pdf"}
+    - {doc: "Income-tax Rules, 2026", section: "rule 279", url: "https://www.incometaxindia.gov.in/w/rule-279-1"}
+
+- id: wage_50_rule
+  patterns: ['\b50 ?%(?: wage)? rule\b', '\bhalf (?:of|the) (?:total )?(?:remuneration|salary|pay)\b.{0,30}\bwages?\b', '\bfifty percent rule\b']
+  answer: |
+    The "50% rule" in the Code on Wages: wages mean basic pay + DA + retaining allowance. Allowances that are excluded (such as HRA, conveyance, the employer's PF contribution, overtime and statutory bonus) may not be more than one-half of your total remuneration. If they are, the excess is treated as wages, which raises PF, gratuity and bonus worked out on wages. The Government may notify a different percentage.
+  sources:
+    - {doc: "Code on Wages, 2019", section: "s.2(y), proviso", url: "https://www.labour.gov.in/static/uploads/2025/06/c328da14bbb15fc4ad571dc33e7a4ab3.pdf"}
+    - {doc: "MoLE: Additional FAQs on the Labour Codes", section: "Q1, Q8", url: "https://www.labour.gov.in/static/uploads/2026/03/a4ccf4c6d97c4f1f36a6d83f8c64213d.pdf"}
+
+- id: per_day_rule
+  patterns: ['\b(?:26|30) (?:vs|or|v/s) (?:26|30|calendar)\b', '\bhow is (?:per[- ]day|daily) (?:salary|pay|wage) (?:calculated|worked out)\b', '\bper[- ]day salary rule\b', '\bdays? (?:are|is) used (?:for|to calculate) (?:per[- ]day|lop|loss of pay)\b']
+  answer: |
+    The law doesn't fix whether a month's salary is divided by 26, 30 or the calendar days of the month; it is company policy (your appointment letter or HR policy says which). What the law does say: a deduction for absence must be in proportion to the period you were absent, and total deductions in a wage period can't exceed half your wages. The only "× 26" in the rules is for converting minimum-wage daily rates into monthly ones.
+
+    Give me your monthly salary and your company's method (e.g. "per-day salary for ₹30,000, 26 days") and I'll calculate it.
+  sources:
+    - {doc: "Code on Wages, 2019", section: "s.18, s.20", url: "https://www.labour.gov.in/static/uploads/2025/06/c328da14bbb15fc4ad571dc33e7a4ab3.pdf"}
+    - {doc: "Code on Wages (Central) Rules, 2026", section: "rule 3(2)", url: "https://www.labour.gov.in/static/uploads/2026/05/6eb0c35ba63b776487a025e5123b6b12.pdf"}
+
+- id: full_and_final
+  patterns: ['\bfull and final\b', '\bf ?& ?f\b', '\bfnf\b', '\bsettlement (?:after|on) (?:resignation|leaving|exit)\b']
+  answer: |
+    A full and final settlement usually includes:
+    - salary for the days worked in the last month;
+    - leave encashment for unused earned leave;
+    - statutory bonus, if due for the year;
+    - gratuity, if you completed the qualifying service;
+    - any pending reimbursements or arrears;
+    - minus recoveries: notice-pay shortfall, advances, company assets.
+
+    Under the Code on Wages, wages due on resignation, removal or dismissal must be paid within two working days. Leave encashment on quitting is due before the second working day after you leave. PF is not part of F&F: you withdraw or transfer it with EPFO using your UAN.
+  sources:
+    - {doc: "Code on Wages, 2019", section: "s.17(2)", url: "https://www.labour.gov.in/static/uploads/2025/06/c328da14bbb15fc4ad571dc33e7a4ab3.pdf"}
+    - {doc: "OSH Code, 2020", section: "s.32(1)(vi)", url: "https://www.labour.gov.in/static/uploads/2025/07/36fcfa5d8e6b9145e282bf7b950d6c47.pdf"}
+
+- id: pf_rates
+  patterns: ['\b(?:pf|epf|provident fund)\b.{0,25}\b(?:rates?|percentage|percent|contribution rates?|how much (?:is|does))\b', '\b(?:eps|edli|admin(?:istrative)? charges?)\b', '\bemployer(?:''s)? (?:pf|12 ?%)\b.{0,30}\b(?:split|divided|eps|epf)\b', '\b(?:pf|epf)\b.{0,40}\b(?:full basic|capped|ceiling|limit|voluntary|above)\b']
+  answer: |
+    - Employee: {pct:pf.employee_rate} of PF wages (basic + DA), deducted from salary.
+    - Employer: {pct:pf.employer_rate}, split into EPS (pension) {pct:pf.eps_rate} of wages up to {inr:pf.eps_wage_cap}, and the rest to your EPF account.
+    - Employer also pays EDLI (insurance) at {pct:pf.edli_rate} and EPF admin charges, on top of the {pct:pf.employer_rate}. Many companies show these inside CTC.
+    - PF wage ceiling: {inr:pf.wage_ceiling} a month. Contributions are compulsory on wages up to the ceiling; paying on full basic above it is optional (by agreement between you and the employer).
+
+    Give me your basic (e.g. "PF on basic ₹30,000") and I'll calculate each share.
+  sources:
+    - {doc: "MoLE notification S.O. 5109(E), 17 Sept 2026", section: "wage ceiling", url: "https://www.labour.gov.in/static/uploads/2026/09/2b0f1dbbd3769fc388416186ec145328.pdf"}
+    - {doc: "Code on Social Security, 2020", section: "Chapter III", url: "https://www.labour.gov.in/static/uploads/2025/07/b0620548445580767b5c0d18c95c26f7.pdf"}
+
+- id: pf_withdrawal_tax
+  patterns: ['\b(?:pf|epf)\b.{0,40}\b(?:tax|taxable|tds)\b', '\bwithdraw\w*\b.{0,30}\bbefore 5 years\b']
+  answer: |
+    PF withdrawn after 5 years of continuous service is tax-free. Before 5 years it is taxable, unless service ended because of ill-health, closure of the business or another cause beyond your control, or the balance is moved to your new employer's PF or to NPS. When it is taxable, EPFO deducts TDS at 10% if the payout is ₹50,000 or more (you can give a no-deduction declaration if your income is below the taxable limit).
+  sources:
+    - {doc: "Income-tax Act, 2025", section: "Schedule XI, Part A, paras 8-10", url: "https://www.incometaxindia.gov.in/w/schedule-xi-2"}
+    - {doc: "Income-tax Act, 2025", section: "s.392(7), s.393(6)", url: "https://www.incometaxindia.gov.in/w/section-392-6"}
+
+- id: uan_epfo
+  patterns: ['\buan\b', '\b(?:pf|epf)\b.{0,25}\b(?:balance|passbook|transfer|withdraw\w*|claim|kyc)\b', '\b(?:check|know)\b.{0,20}\b(?:pf|epf) (?:balance|amount)\b', '\btransfer\b.{0,15}\b(?:pf|epf)\b']
+  answer: |
+    - **UAN** (Universal Account Number) is your 12-digit PF number for life; all your employers' PF accounts link to it. Your employer gives it to you, or find it on your payslip.
+    - **Balance**: EPFO member passbook (passbook.epfindia.gov.in), the UMANG app, or SMS "EPFOHO UAN" to 7738299899.
+    - **Transfer** on changing jobs: online on the EPFO Member Portal or UMANG (Form 13), with your Aadhaar-linked UAN.
+    - **Withdrawal**: online claim (Composite Claim Form, Aadhaar) on the Member Portal or UMANG. Partial withdrawals are allowed for listed reasons; full withdrawal is allowed after leaving employment and staying unemployed.
+    - EPFO helpline: 14470.
+
+    I can't see your PF account; for your actual balance or claim status use the portal or ask HR.
+  sources:
+    - {doc: "EPFO: FAQs", section: "UAN, balance, claims", url: "https://www.epfindia.gov.in/site_en/FAQ.php"}
+    - {doc: "PIB: EPFO withdrawal reforms, 15 Oct 2025", section: "", url: "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2179689"}
+
+- id: esi_benefits
+  patterns: ['\b(?:esi|esic)\b.{0,30}\b(?:benefits?|claim|card|hospital|sickness|maternity|treatment)\b', '\bhow (?:to|do i) claim\b.{0,20}\b(?:esi|esic)\b', '\b(?:esi|esic)\b.{0,30}\b(?:contribution period|benefit period)\b']
+  answer: |
+    ESIC covers employees whose gross wages are up to {inr:esic.wage_ceiling} a month. You pay {pct:esic.employee_rate} of gross and the employer pays {pct:esic.employer_rate}.
+
+    Benefits: free medical care for you and your family at ESIC dispensaries and hospitals; sickness benefit (70% of wages for up to 91 days); maternity benefit (26 weeks at full wages); disablement and dependants' benefit (90% of wages); funeral expenses (₹15,000); and unemployment allowance under the listed schemes.
+
+    Contribution periods are April-September and October-March. Claims are made at your ESIC Branch Office (cash benefits) or through the ESIC portal and the e-Pehchan card for treatment.
+  sources:
+    - {doc: "ESIC: Benefits", section: "", url: "https://esic.gov.in/information-benefits"}
+    - {doc: "ESIC: Contribution", section: "", url: "https://esic.gov.in/contribution"}
+
+- id: pt_basics
+  patterns: ['\bwhat is (?:professional|profession) tax\b', '\b(?:professional|profession) tax\b.{0,40}\b(?:who (?:pays|deducts)|every state|all states|same in|which states)\b']
+  answer: |
+    Professional Tax (PT) is a state tax on salaried people and professionals. Your employer deducts it from your salary each month and pays it to the state. It isn't the same everywhere: each state sets its own slabs, and some states don't levy it at all. In the old income-tax regime, PT you paid is deductible from salary.
+
+    Gujarat is the default here: tell me your monthly salary (e.g. "PT on ₹15,000 in Gujarat") for the exact amount.
+  sources:
+    - {doc: "Rate of Profession Tax, Gujarat", section: "Schedule, entry 1", url: "https://commercialtax.gujarat.gov.in/vatwebsite/download/schedule/Rate_of_Profession_Tax.pdf"}
+
+- id: form16
+  patterns: ['\bform ?(?:16|130)\b(?!.{0,30}\b(?:due|last date|by when|when)\b)']
+  answer: |
+    Form 130 (it replaced Form 16 from tax year 2026-27) is the TDS certificate your employer gives you for your salary: it shows your salary, exemptions, deductions and the tax deducted and deposited. Employers issue it by 15 June after the tax year ends. You use it to file your income-tax return. Ask HR/payroll for your copy.
+  sources:
+    - {doc: "Income-tax Rules, 2026", section: "rule 215(1)", url: "https://www.incometaxindia.gov.in/w/rule-215-1"}
+
+- id: monthly_tds
+  patterns: ['\bhow (?:is|does) (?:monthly )?tds\b.{0,30}\b(?:calculated|worked out|deducted|computed)\b', '\bhow (?:does|do) (?:my )?employer (?:calculate|deduct) tds\b']
+  answer: |
+    Your employer estimates your salary income for the whole tax year, works out the tax under your regime (the new regime unless you choose the old one), and deducts it in equal monthly instalments at that average rate. If your salary or your investment declarations (proof on Form 124, formerly 12BB) change, the remaining months are adjusted. Give me your yearly salary (e.g. "tax on ₹12 lakh, old vs new") and I'll show the monthly TDS.
+  sources:
+    - {doc: "Income-tax Act, 2025", section: "s.392(1), (4), (5)", url: "https://www.incometaxindia.gov.in/w/section-392-6"}
+
+- id: deductions
+  patterns: ['\b(?:which|what) deductions\b', '\bdeductions?\b.{0,30}\bnew regime\b', '\b80 ?c\b(?!.{0,20}\d)|\b80 ?d\b(?!.{0,20}\d)|\b80ccd\b(?!.{0,20}\d)', '\bhome loan (?:interest )?(?:deduction|benefit)\b']
+  answer: |
+    Old regime deductions (limits per year):
+    - Section 123 (was 80C): PPF, ELSS, life insurance, your PF, home-loan principal, up to {inr:income_tax.deduction_s123}.
+    - Section 126 (was 80D): health insurance, {inr:income_tax.deduction_s126_self} for self and family ({inr:income_tax.deduction_s126_self_senior} if senior), plus {inr:income_tax.deduction_s126_parents} for parents ({inr:income_tax.deduction_s126_parents_senior} if senior).
+    - Section 124(3) (was 80CCD(1B)): your own NPS, an extra {inr:income_tax.deduction_s124_3}.
+    - Home-loan interest on a self-occupied house, up to {inr:income_tax.deduction_home_loan_interest}.
+    - HRA exemption and Professional Tax.
+
+    New regime: none of these. Only the standard deduction ({inr:income_tax.standard_deduction_new}) and the employer's NPS contribution (up to {pct:income_tax.employer_nps_rate_new} of basic + DA) are allowed.
+  sources:
+    - {doc: "Income-tax Act, 2025", section: "s.202(2)", url: "https://www.incometaxindia.gov.in/w/section-202-78"}
+    - {doc: "Income-tax Act, 2025", section: "s.123", url: "https://www.incometaxindia.gov.in/w/section-123-96"}
+    - {doc: "Income-tax Act, 2025", section: "s.126", url: "https://www.incometaxindia.gov.in/w/section-126-92"}
+
+- id: gratuity_service
+  patterns: ['\bgratuity\b.{0,40}\b\d+\s*(?:years?|yrs?)\s*(?:and\s*)?\d+\s*months?\b', '\bgratuity\b.{0,30}\bround(?:ing|ed)?\b']
+  answer: |
+    - Eligibility: {num:gratuity.min_years_permanent} years of continuous service ({num:gratuity.min_years_fixed_term} year for a fixed-term employee; no minimum on death or disablement).
+    - Amount: {num:gratuity.days_per_year} days' wages for every completed year, using last basic + DA ÷ {num:gratuity.wage_days_divisor}. A part year of more than {num:gratuity.round_up_after_months} months counts as a full year for the amount.
+    - Whether a service just short of {num:gratuity.min_years_permanent} full years meets the eligibility test depends on "continuous service" as the Code defines it, so check that with HR before relying on it.
+
+    Give me your last basic + DA and service (e.g. "gratuity for ₹40,000 and 7 years") for the amount.
+  sources:
+    - {doc: "Code on Social Security, 2020", section: "s.53", url: "https://www.labour.gov.in/static/uploads/2025/07/b0620548445580767b5c0d18c95c26f7.pdf"}
+
+- id: gratuity_tax
+  patterns: ['\bgratuity\b.{0,30}\b(?:tax|taxable|exempt\w*)\b', '\b(?:tax|taxable|exempt\w*)\b.{0,30}\bgratuity\b']
+  answer: |
+    Gratuity received on retirement or leaving is tax-free up to the least of: the gratuity actually received, the amount under the gratuity law (15 days' wages per year of service), and a limit notified by the Government. Anything above that is taxed as salary. The notified limit under the Income-tax Act, 2025 isn't configured in data/rates.yaml yet, so I can't give the exact exempt amount.
+  sources:
+    - {doc: "Income-tax Act, 2025", section: "s.19(1) Table Sl. 5-6", url: "https://www.incometaxindia.gov.in/w/section-19-206"}
+
+- id: leave_rules
+  patterns: ['\b(?:earned|annual|privilege) leave\b(?!.{0,30}\d)', '\bleave encashment\b(?!.{0,40}\d).{0,30}\b(?:tax|taxable|rule|rules|allowed|eligible)?', '\bhow many (?:days of )?leaves?\b']
+  answer: |
+    Annual leave with wages (OSH Code): if you worked at least {num:leave.min_days_worked} days in a calendar year, you earn 1 day of leave for every {num:leave.days_worked_per_leave_day} days worked. Up to {num:leave.carry_forward_max} days can be carried forward; leave above that is encashed at the end of the year, and you can ask for encashment at year-end. On leaving the job, unused leave is paid before the second working day after you leave.
+
+    Tax: encashment while in service is taxable as salary; on retirement or leaving, part of it is exempt up to a notified limit. Give me your basic + DA and days (e.g. "leave encashment for 15 days on basic ₹30,000, 30 days basis") to calculate.
+  sources:
+    - {doc: "OSH Code, 2020", section: "s.32", url: "https://www.labour.gov.in/static/uploads/2025/07/36fcfa5d8e6b9145e282bf7b950d6c47.pdf"}
+    - {doc: "Income-tax Act, 2025", section: "s.19(1) Table Sl. 14", url: "https://www.incometaxindia.gov.in/w/section-19-206"}
+
+- id: minimum_wages
+  patterns: ['\bminimum wages?\b']
+  answer: |
+    Minimum wages are set by each state for each zone and skill level (unskilled, semi-skilled, skilled, highly skilled), and revised twice a year (from 1 April and 1 October) for the dearness allowance. Monthly rate = daily rate × 26; hourly rate = daily rate ÷ 8.
+
+    For Gujarat, the current rates are published by the Labour Commissioner, Gujarat (col.gujarat.gov.in). They aren't in data/rates.yaml yet, so I won't quote a figure.
+  sources:
+    - {doc: "Code on Wages (Central) Rules, 2026", section: "rules 3(2), 4", url: "https://www.labour.gov.in/static/uploads/2026/05/6eb0c35ba63b776487a025e5123b6b12.pdf"}
+    - {doc: "Labour Commissioner, Gujarat: minimum wage rates", section: "", url: "https://col.gujarat.gov.in/e-citizen-rate26-2.htm"}
+
+- id: contract_staff
+  patterns: ['\bcontract(?:ual)? (?:staff|employees?|labour|workers?)\b.{0,40}\b(?:compliance|vs|versus|permanent|pf|epf)\b', '\b(?:permanent|regular) (?:vs|versus|and) contract\b', '\bcontract\w*\b.{0,20}\b(?:vs|versus|or)\b.{0,15}\bpermanent\b']
+  answer: |
+    Contract and permanent employees get the same PF and ESIC coverage: the Social Security Code counts anyone employed through a contractor as an employee. The principal employer must ensure PF and ESIC are paid for contract workers and can recover the amounts from the contractor. If the contractor doesn't pay wages in full, the principal employer must. Establishments with 50 or more contract workers, and contractors employing 50 or more, need registration and a licence under the OSH Code. Gratuity for contract workers is paid by the contractor.
+  sources:
+    - {doc: "Code on Social Security, 2020", section: "ss.2(26), 17, 31", url: "https://www.labour.gov.in/static/uploads/2025/07/b0620548445580767b5c0d18c95c26f7.pdf"}
+    - {doc: "MoLE: Handbook on the OSH Code", section: "ss.45-55", url: "https://www.labour.gov.in/static/uploads/2026/02/83978455025732b99b0165def80ab171.pdf"}
+    - {doc: "MoLE: Additional FAQs on the Labour Codes", section: "Q16", url: "https://www.labour.gov.in/static/uploads/2026/03/a4ccf4c6d97c4f1f36a6d83f8c64213d.pdf"}
