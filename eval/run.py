@@ -7,7 +7,7 @@ PowerShell:
 Metrics
     route accuracy     the router picked the expected path (not_found questions: rag, or refused up front as out_of_scope)
     retrieval hit@4    the expected document is among the first 4 citations (rag questions)
-    answer contains    the answer contains the expected phrase (any of a|b|c, case-insensitive)
+    answer contains    the answer contains the expected phrases (a|b = any of, a&b = all of; case-insensitive)
     not_found prec.    of the answers that refused, how many were supposed to refuse
     not_found recall   of the trick questions, how many were refused
     median latency     per question, end to end
@@ -26,7 +26,7 @@ from rich.console import Console
 from rich.table import Table as RichTable
 
 from app import rag
-from app.jurisdiction import resolve
+from app.jurisdiction import foreign_place, resolve
 from app.pipeline import handle
 from app.schemas import ChatRequest, ChatResponse, JurisdictionIn, Turn
 from app.services import Services, build_services
@@ -65,6 +65,11 @@ def _any_in(alternatives: str, text: str) -> bool:
     return any(a.strip().lower() in text.lower() for a in alternatives.split("|") if a.strip())
 
 
+def _contains(expected: str, text: str) -> bool:
+    """`a|b` = any of; `a&b|c` = a, and also b or c (checks that an answer is complete, not just on topic)."""
+    return all(_any_in(group, text) for group in expected.split("&") if group.strip())
+
+
 def score(row: Row, route: str, resp: ChatResponse) -> dict[str, bool | None]:
     """Per-question checks. None = not applicable to this question."""
     expected_route = row.type if row.type in ("rag", "tool", "sql") else "rag"
@@ -73,7 +78,7 @@ def score(row: Row, route: str, resp: ChatResponse) -> dict[str, bool | None]:
         "route": route == expected_route or (row.type == "not_found" and route == "out_of_scope"),
         "hit@4": _any_in(row.expected_doc, " ".join(c.doc for c in resp.citations[:4]))
         if row.type == "rag" and row.expected_doc else None,
-        "contains": _any_in(row.expected_answer_contains, text) if row.expected_answer_contains else None,
+        "contains": _contains(row.expected_answer_contains, text) if row.expected_answer_contains else None,
         "refused": resp.type == "not_found",
     }
 
@@ -117,6 +122,9 @@ def sweep(services: Services, rows: list[Row], thresholds: list[float]) -> list[
     best: list[tuple[bool, float]] = []
     for row in rows:
         if row.type not in ("rag", "not_found") or row.follow_up_of:
+            continue
+        if foreign_place(row.question):  # refused before retrieval, whatever the threshold
+            best.append((row.type == "not_found", 0.0))
             continue
         scope = resolve(row.question, "auto", row.state or "gujarat")
         passages = rag.retrieve(services, row.question, scope)

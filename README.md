@@ -217,7 +217,7 @@ Follow-ups are rewritten into a standalone question only when they clearly are o
 
 ## Evaluation
 
-`eval/questions.csv` has 30 questions: 16 RAG (5 follow-ups), 5 calculator, 4 SQL and 5 trick questions that must be refused.
+`eval/questions.csv` has 33 questions: 19 RAG (5 follow-ups), 5 calculator, 4 SQL and 5 trick questions that must be refused. In `expected_answer_contains`, `a|b` means any of and `a&b` means all of, so q31 checks that the wages definition includes both what wages include and what they exclude.
 
 ```powershell
 python -m eval.run --sweep 0.34,0.38,0.42,0.47

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from eval.run import load_questions, run, summarize, sweep, write_report
+from eval.run import _contains, load_questions, run, summarize, sweep, write_report
 
 
 def test_questions_file_shape():
     rows = load_questions()
-    assert len(rows) == 30
+    assert len(rows) == 33
     assert sum(r.type == "not_found" for r in rows) == 5
     assert sum(bool(r.follow_up_of) for r in rows) == 5
     ids = [r.id for r in rows]
@@ -24,7 +24,21 @@ def test_eval_runs_with_fakes(services, store, llm, tmp_path):
     summary = summarize(results)
     assert summary["route accuracy"][0] == 1.0
     assert summary["retrieval hit@4"] == (1.0, 2)
-    assert summary["not_found recall"] == (1.0, 1)  # "Dubai" scores below the threshold
+    assert summary["not_found recall"] == (1.0, 1)  # "Dubai" is refused before retrieval
     assert results[1].resp.type == "rag"  # the follow-up was rewritten using q02 as history
     report = write_report(results, summary, services, sweep(services, rows, [0.1, 0.9]), tmp_path / "r.md")
     assert "| route accuracy | 100% | 3 |" in report and "Threshold sweep" in report
+
+
+def test_contains_supports_all_of_groups():
+    expected = "remuneration&basic pay&does not include|shall not include"
+    assert _contains(expected, "Wages means all remuneration and includes basic pay, but does not include bonus")
+    assert not _contains(expected, "Wages means all remuneration and includes basic pay")  # exclusions missing
+
+
+def test_real_test_questions_are_in_the_eval():
+    rows = {r.question: r for r in load_questions()}
+    assert rows["Definition of wages under the Code on Wages"].type == "rag"
+    assert rows["Who is covered for gratuity under the SS Code"].expected_answer_contains.count("&") == 1
+    assert rows["What is a fixed term employee?"].expected_doc
+    assert rows["Gratuity rule in Dubai?"].type == "not_found"

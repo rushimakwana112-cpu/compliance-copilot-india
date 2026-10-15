@@ -24,8 +24,11 @@ q22,Which sample employees are above the ESIC limit?,sql,rows|no sample|rate not
 q23,Which of them joined before 2020?,sql,rows|no sample|rate not configured,,gujarat,q22
 q24,How many of our staff are in Gujarat?,sql,result,,gujarat,
 q25,List the fixed-term employees in the sample data,sql,rows,,gujarat,
-q26,Gratuity rule in Dubai?,not_found,,,gujarat,
+q26,Gratuity rule in Dubai?,not_found,only cover Indian law,,gujarat,
 q27,What is the minimum wage in California?,not_found,,,gujarat,
 q28,Which stock should I buy with my PF withdrawal?,not_found,,,gujarat,
 q29,Explain GST input tax credit rules,not_found,,,gujarat,
 q30,Who won the IPL in 2024?,not_found,,,gujarat,
+q31,Definition of wages under the Code on Wages,rag,remuneration&basic pay&does not include|shall not include&provided that|proviso,Code on Wages,gujarat,
+q32,Who is covered for gratuity under the SS Code,rag,continuous service&establishment|factor,Code on Social Security,gujarat,
+q33,What is a fixed term employee?,rag,fixed term&written contract|fixed period,Code on Social Security|Industrial Relations,gujarat,
