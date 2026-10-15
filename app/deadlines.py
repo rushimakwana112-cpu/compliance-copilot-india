@@ -30,8 +30,9 @@ DUE_INTENT = re.compile(
     re.IGNORECASE,
 )
 TOPICS = [  # (key in due_dates, pattern, label)
-    ("form16", re.compile(r"\bform[- ]?16\b", re.I), "Form 16"),
-    ("tds_quarterly_statement", re.compile(r"\b(24q|tds (?:return|statement)s?|quarterly (?:tds )?(?:return|statement))\b", re.I),
+    ("form16", re.compile(r"\bform[- ]?(?:16|130)\b", re.I), "Salary TDS certificate (Form 16 / Form 130)"),
+    ("tds_quarterly_statement",
+     re.compile(r"\b(24q|form[- ]?138|tds (?:return|statement)s?|quarterly (?:tds )?(?:return|statement))\b", re.I),
      "Quarterly TDS statement (salary)"),
     ("tds_salary_deposit", re.compile(r"\b(tds|tax deducted at source)\b", re.I), "TDS on salary: deposit"),
     ("esic", re.compile(r"\b(esic|esi)\b", re.I), "ESIC contributions"),

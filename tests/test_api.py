@@ -147,6 +147,7 @@ def test_rates_endpoint_lists_figures_with_sources(services):
         bad = c.get("/api/rates", params={"on": "not-a-date"})
     assert body["date"] == "2026-10-15"
     ceiling = body["rates"]["pf.wage_ceiling"]
-    assert ceiling["value"] == 25000 and ceiling["source_doc"] == "Gazette notification 17 Sept 2026"
-    assert "pf.employee_rate" in body["rates"] and body["rates"]["pf.employee_rate"]["value"] is None
+    assert ceiling["value"] == 25000 and ceiling["source_doc"].startswith("MoLE notification S.O. 5109(E)")
+    assert body["rates"]["gratuity.max_amount"]["value"] is None  # still to be notified: listed, not hidden
+    assert body["due_dates"]["tds_salary_deposit"]["section"] == "rule 218(2)"
     assert "gujarat" in body["professional_tax"] and bad.status_code == 422

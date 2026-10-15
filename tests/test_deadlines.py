@@ -63,7 +63,7 @@ def test_tds_deposit_and_quarterly_statement(rates):
     assert [r[0] for r in q.table.rows] == ["Quarterly TDS statement (salary)"]
     assert q.table.rows[0][2] == "20 October 2026 (Q2)"
     f16 = tools.run("Form 16 due date", scope(), rates, TODAY)
-    assert f16.table.rows[0][2] == "10 June 2027"
+    assert f16.table.rows[0][2] == "10 June 2027" and "Form 130" in f16.table.rows[0][0]
 
 
 def test_professional_tax_due_date_uses_the_state(rates):

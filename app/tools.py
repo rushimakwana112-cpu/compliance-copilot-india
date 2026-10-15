@@ -241,7 +241,8 @@ def professional_tax(state: str, monthly_salary: float, rates: dict[str, Any] | 
         if lo is None or tax is None:
             raise RateMissing(f"professional_tax.{state}.slabs", src.source_doc)
         if monthly_salary >= lo and (hi is None or monthly_salary <= hi):
-            band = f"{inr(lo)} – {inr(hi)}" if hi is not None else f"{inr(lo)} and above"
+            low = f"above {inr(math.floor(lo))}" if lo != int(lo) else f"{inr(lo)} and above"  # 12000.01 = above 12,000
+            band = f"{inr(lo)} – {inr(hi)}" if hi is not None else low
             name = next((s.name for s in load_states() if s.id == state), state)
             return ChatResponse(
                 type="tool", tool=f"professional_tax(state={state!r}, monthly_salary={monthly_salary:g})",
@@ -256,7 +257,11 @@ def gratuity_estimate(last_basic_da: float, years: float, employment_type: str =
                       rates: dict[str, Any] | None = None, on: date | None = None) -> ChatResponse:
     """Gratuity = last (basic + DA) × days_per_year / wage_days_divisor × counted years, capped at max_amount."""
     r = rates or load_rates()
-    days, divisor, cap = (rate(r, f"gratuity.{k}", on) for k in ("days_per_year", "wage_days_divisor", "max_amount"))
+    days, divisor = (rate(r, f"gratuity.{k}", on) for k in ("days_per_year", "wage_days_divisor"))
+    try:
+        cap: Rate | None = rate(r, "gratuity.max_amount", on)
+    except RateMissing:
+        cap = None  # the ceiling is notified separately; without it the amount is shown uncapped, and says so
     fixed = employment_type.lower().startswith("fixed")
     min_years = rate(r, "gratuity.min_years_fixed_term" if fixed else "gratuity.min_years_permanent", on)
     completed = math.floor(years)
@@ -275,14 +280,16 @@ def gratuity_estimate(last_basic_da: float, years: float, employment_type: str =
             f"{years:g} given. (Death or disablement are exceptions; see the cited section.)",
         )
     amount = last_basic_da * days.value / divisor.value * completed
-    capped = min(amount, cap.value)
+    capped = min(amount, cap.value) if cap else amount
     rows = [
         ["Last basic + DA", "per month", inr(last_basic_da)],
         ["Counted years", f"{years:g} given" + (f", >{round_after.value:g} months rounds up" if round_after else ""), str(completed)],
         ["Formula", f"wage × {days.value:g} / {divisor.value:g} × years", inr(amount)],
     ]
-    if capped < amount:
+    if cap and capped < amount:
         rows.append(["Ceiling applied", f"max {inr(cap.value)}", inr(capped)])
+    elif not cap:
+        rows.append(["Ceiling", "not configured in data/rates.yaml: amount not capped", "check"])
     rows.append(["Gratuity payable", "", inr(capped)])
     return ChatResponse(
         type="tool", tool=tool, answer=f"Estimated gratuity for {completed} counted year(s) at {inr(last_basic_da)} last basic + DA:",

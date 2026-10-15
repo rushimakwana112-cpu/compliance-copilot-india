@@ -100,22 +100,32 @@ def test_gratuity_rounding_ceiling_and_eligibility(rates):
     assert gratuity_estimate(30000, 2, "fixed-term", rates).table is not None
 
 
-def test_shipped_rates_are_unconfigured_and_say_so():
-    # The repo ships rates.yaml with nulls where no official document was checked: refuse, don't guess.
-    out = run("Calculate PF for basic ₹18,000", Scope(["gujarat"], "default"), load_rates())
-    assert out.type == "tool" and out.answer.startswith("Rate not configured: pf.employee_rate") and out.table is None
+def test_shipped_rates_calculate_with_their_source():
+    out = run("Calculate PF for basic ₹18,000", Scope(["gujarat"], "default"), load_rates(), TODAY)
+    assert out.type == "tool" and out.table is not None and out.table.rows[-1][0] == "Total"
+    assert any("S.O. 5109(E)" in c.doc for c in out.citations)
 
 
-def test_shipped_rates_have_the_two_pf_ceilings():
+def test_shipped_rates_refuse_what_is_not_configured():
+    # Maharashtra PT is still empty in rates.yaml: refuse, don't guess.
+    out = run("Calculate professional tax on ₹15,000 salary in Pune", Scope(["maharashtra"], "default"), load_rates(), TODAY)
+    assert out.answer.startswith("Rate not configured: professional_tax.maharashtra") and out.table is None
+    # No gratuity ceiling is notified yet: the amount is shown uncapped and says so.
+    g = run("Calculate gratuity for last basic + DA ₹40,000 and 7 years", Scope(["gujarat"], "default"), load_rates(), TODAY)
+    assert any(row[0] == "Ceiling" and "not capped" in row[1] for row in g.table.rows)
+
+
+def test_shipped_rates_are_dated_and_sourced():
     shipped = load_rates()
     on = resolved(shipped, TODAY)["rates"]["pf.wage_ceiling"]
-    assert on["value"] == 25000 and on["source_doc"] == "Gazette notification 17 Sept 2026" and on["status"] == "current"
+    assert on["value"] == 25000 and on["effective_from"] == "2026-09-17" and on["status"] == "current"
     old = [v for v in shipped["pf"]["wage_ceiling"] if v["status"] == "historical"]
     assert [v["value"] for v in old] == [15000]
-    for group in ("pf", "esic", "gratuity"):  # every figure is a list of dated versions
+    for group in ("pf", "esic", "gratuity"):  # every figure is a list of dated versions with its source
         for name, node in shipped[group].items():
             assert isinstance(node, list) and all({"value", "effective_from", "effective_to", "source_doc", "status"}
                                                   <= set(v) for v in node), f"{group}.{name}"
+            assert all(v["source_doc"] for v in node), f"{group}.{name}"
 
 
 def test_resolved_lists_nulls(rates):
