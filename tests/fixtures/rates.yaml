@@ -26,3 +26,12 @@ professional_tax:
       slabs:
         - {from: 0, to: 9999, monthly_tax: 0}
         - {from: 10000, to: null, monthly_tax: 100}
+due_dates:
+  pf: [{value: 12, month_offset: 1, status: current, source_doc: "Test PF scheme", section: "para 9", note: "Test note."}]
+  esic: [{value: null, status: current, source_doc: "Test ESIC regulation"}]
+  tds_salary_deposit: [{value: 5, month_offset: 1, status: current, source_doc: "Test tax rule", section: "rule 1"}]
+  tds_quarterly_statement:
+    - {value: {"Q1": "07-20", "Q2": "10-20", "Q3": "01-20", "Q4": "05-20"}, status: current, source_doc: "Test tax rule"}
+  form16: [{value: "06-10", status: current, source_doc: "Test tax rule"}]
+  professional_tax:
+    gujarat: [{value: 18, month_offset: 1, status: current, source_doc: "Test PT act"}]

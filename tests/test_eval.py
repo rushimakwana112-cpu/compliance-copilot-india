@@ -17,7 +17,8 @@ from eval.run import (
 
 def test_questions_file_shape():
     rows = load_questions()
-    assert len(rows) == 33
+    assert len(rows) == 35
+    assert all(r.type == "tool" for r in rows if r.id in {"q08", "q34", "q35"})  # due-date questions
     assert sum(r.type == "not_found" for r in rows) == 5
     assert sum(bool(r.follow_up_of) for r in rows) == 5
     ids = [r.id for r in rows]
@@ -158,7 +159,8 @@ def test_indexed_docs_reads_the_manifest():
 def test_requires_doc_column():
     rows = {r.id: r for r in load_questions()}
     assert rows["q09"].requires_doc.startswith("Gujarat Professional Tax") and rows["q12"].requires_doc
-    assert "EPF Scheme" in rows["q08"].requires_doc and not rows["q02"].requires_doc
+    assert "Maharashtra Professional Tax" in rows["q11"].requires_doc
+    assert not rows["q08"].requires_doc and not rows["q02"].requires_doc  # q08 is now a due-date tool question
 
 
 def test_report_shows_model_and_average_prompt_tokens(services, store, llm, tmp_path):

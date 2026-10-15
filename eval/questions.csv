@@ -6,7 +6,7 @@ q04,Gratuity rule for fixed-term employees,rag,fixed,Code on Social Security,guj
 q05,What is the definition of wages under the Code on Wages?,rag,wages,Code on Wages,gujarat,,
 q06,What is the minimum and maximum bonus an employee can get?,rag,bonus,Code on Wages,gujarat,,
 q07,Is bonus paid to contract workers too?,rag,bonus|contract,Code on Wages,gujarat,q06,
-q08,When must the employer deposit PF contributions each month?,rag,due|deposit,EPFO,gujarat,,EPF Scheme|Employees' Provident Funds Scheme
+q08,When must the employer deposit PF contributions each month?,tool,due|not configured,EPFO,gujarat,,
 q09,"Professional tax for ₹15,000 salary in Ahmedabad",rag,professional tax,Gujarat Professional Tax,gujarat,,Gujarat Professional Tax|Gujarat PT
 q10,What about Maharashtra?,rag,maharashtra,Maharashtra,gujarat,q09,Maharashtra Professional Tax|Maharashtra PT
 q11,Compare Gujarat and Maharashtra professional tax,rag,gujarat,Professional Tax,gujarat,,Gujarat Professional Tax|Gujarat PT&Maharashtra Professional Tax|Maharashtra PT
@@ -32,3 +32,5 @@ q30,Who won the IPL in 2024?,not_found,,,gujarat,,
 q31,Definition of wages under the Code on Wages,rag,remuneration&basic pay&does not include|shall not include|exclud&provided that|proviso|one-half|half|50,Code on Wages,gujarat,,
 q32,Who is covered for gratuity under the SS Code,rag,continuous service&establishment|factor,Code on Social Security,gujarat,,
 q33,What is a fixed term employee?,rag,fixed term&written contract|fixed period,Code on Social Security|Industrial Relations,gujarat,,
+q34,What is the due date to deposit TDS on salary?,tool,due|not configured,Income-tax,gujarat,,
+q35,Last date for professional tax payment in Ahmedabad?,tool,due|not configured,Gujarat Professional Tax,gujarat,,

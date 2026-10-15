@@ -72,7 +72,7 @@ The Industrial Relations Code and the Occupational Safety, Health and Working Co
 
 ## Evaluation
 
-`eval/questions.csv` has 33 questions: 19 retrieval questions (5 of them follow-ups), 5 calculator, 4 SQL and 5 trick questions that must be refused. Questions whose documents are not indexed yet are skipped and left out of the metrics. Full per-question results: [`eval/report.md`](eval/report.md).
+`eval/questions.csv` has 35 questions: 18 retrieval questions (5 of them follow-ups), 5 calculator, 3 due-date, 4 SQL and 5 trick questions that must be refused. Questions whose documents are not indexed yet are skipped and left out of the metrics. Full per-question results: [`eval/report.md`](eval/report.md).
 
 <!-- eval-results:start (scripts/run_all.ps1 rewrites this block from eval/report.md) -->
 | Metric | Value |

@@ -21,6 +21,7 @@ from typing import Any
 
 import yaml
 
+from app import deadlines
 from app.config import DATA_DIR
 from app.jurisdiction import Scope, load_states
 from app.schemas import ChatResponse, Citation, Table
@@ -281,6 +282,7 @@ def gratuity_estimate(last_basic_da: float, years: float, employment_type: str =
 
 
 # ----------------------------------------------------------------- parsing the question
+CALC_WORDS = re.compile(r"\b(calculate|compute|how much|work out|estimate)\b", re.IGNORECASE)
 MONEY = re.compile(r"(?:₹|\brs\.?|\binr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(k\b|lakhs?\b|lacs?\b|l\b)?", re.IGNORECASE)
 YEARS = re.compile(r"(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b", re.IGNORECASE)
 MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
@@ -330,6 +332,8 @@ def run(question: str, scope: Scope, rates: dict[str, Any] | None = None, today:
     q = question.lower()
     on, rest = question_date(question)
     on = on or today or date.today()
+    if deadlines.is_deadline_question(question) and not CALC_WORDS.search(question):
+        return deadlines.run(question, scope, rates or load_rates(), on)
     amounts = parse_amounts(rest)
     if not amounts:
         return ChatResponse(type="tool", answer="Please include the monthly amount, e.g. \"Calculate PF for basic ₹18,000\".")
