@@ -15,3 +15,10 @@ https://www.labour.gov.in/static/uploads/2026/09/2b0f1dbbd3769fc388416186ec14532
 https://www.labour.gov.in/static/uploads/2025/12/0fd090d29a4576739079a7b565c8ca9d.pdf,"Gazette: Implementation of Code on Wages, 2019",central,current,2025-11-21,notification
 https://www.labour.gov.in/static/uploads/2025/12/b602569a9cd014c49d91472b6a22b24c.pdf,"Gazette: Implementation of Code on Social Security, 2020",central,current,2025-11-21,notification
 https://www.labour.gov.in/static/uploads/2025/12/3db01976470a13d7b54b0e6e410d42b8.pdf,"Gazette: Implementation of Industrial Relations Code, 2020",central,current,2025-11-21,notification
+# To add next: paste the official PDF link in place of PASTE_URL, fill effective_date, and delete the leading "# ".
+# PASTE_URL,"EPF Scheme, 2026",central,current,,notification
+# PASTE_URL,"EPS, 2026",central,current,,notification
+# PASTE_URL,"EDLI Scheme, 2026",central,current,,notification
+# PASTE_URL,"ESIC wage-ceiling notification",central,current,,notification
+# PASTE_URL,"Gujarat Professional Tax schedule",gujarat,current,,notification
+# PASTE_URL,"CBDT circular: TDS on salaries",central,current,,circular
