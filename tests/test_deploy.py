@@ -50,3 +50,22 @@ def test_healthz_is_cheap(services):
 
     with TestClient(create_app(services)) as c:
         assert c.get("/healthz").json() == {"ok": True}
+
+
+# Statutory rates and ceilings (PF 12%, EPS 8.33%, EPS cap, ESIC ceiling and rates). They may live only in
+# data/rates.yaml with their source; salaries typed in example questions are fine and not matched here.
+LEGAL_NUMBER = r"(?<![\d.,])(?:15000|21000|25000|0\.12|0\.0833|8\.33|0\.0075|0\.0325|0\.75|3\.25)(?![\d,])"
+
+
+def test_no_hard_coded_legal_numbers():
+    import re
+
+    hits = []
+    for folder in ("app", "ingest", "scripts", "frontend"):
+        for path in (ROOT / folder).rglob("*"):
+            if path.suffix not in (".py", ".html", ".js", ".ps1") or "__pycache__" in path.parts:
+                continue
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if re.search(LEGAL_NUMBER, line) and "rgba(" not in line:
+                    hits.append(f"{path.relative_to(ROOT)}:{n}: {line.strip()[:80]}")
+    assert hits == []

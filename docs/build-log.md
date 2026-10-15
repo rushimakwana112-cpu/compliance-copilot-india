@@ -150,3 +150,23 @@ Eval q07 ("Is bonus paid to contract workers too?") was refused: the Code says "
 q31 ("Definition of wages under the Code on Wages") came back starting with "Yes,", because the prompt said "start with a direct answer (Yes / No / …)". The prompt now says to start with Yes or No only for yes/no questions, and each request says which kind it is (questions starting with is/are/does/can/… are yes/no). As a safety net, a leading "Yes," or "No." before the answer to any other question is removed after generation.
 
 **What to learn:** an instruction like "start with Yes/No" gets applied everywhere, even where it makes no sense. Tell the model what kind of question it has, and back up a rule that matters with a cheap check in code.
+
+## Hard-coded legal numbers: audit before removing
+
+Search (tracked files): `git grep -nE "15000|15,000|21000|21,000|8\.33|0\.0833|0\.75|3\.25"`. No hits for 0.75 or 3.25. Every hit, before any change:
+
+| File:line | Text | What it is | Action |
+|---|---|---|---|
+| frontend/index.html:1053 | `amount * 0.12`, `Math.min(amount, 15000)`, `epsBase * 0.0833` | **Legal figures** in the offline PF demo (PF rate, EPS wage cap, EPS rate) | Removed: rates come from `/api/rates` (rates.yaml); offline the demo shows `[rate]` placeholders |
+| frontend/index.html:1059 | `8.33% of …` | **Legal figure** (EPS rate) in the same demo row | Removed, as above (the 12% labels on lines 1058 and 1060 too) |
+| frontend/index.html:567, 576 | "Professional tax for ₹15,000 salary in Ahmedabad" | A salary typed in an example question | Kept: user input, not a legal figure |
+| frontend/index.html:1089 | "Monthly PT on ₹15,000" | The same example salary in a demo table header | Kept |
+| eval/questions.csv:10, 20, 21 | "₹15,000 salary", "gross 15000" | Salaries in eval questions | Kept |
+| tests/test_jurisdiction.py:10, tests/test_rag.py:79–80 | "15000 salary" | Salaries in test questions | Kept |
+| tests/test_tools.py:45, 52, 55, 59, 82, 83, 90 | 15000 / 15,000 | Salaries passed to calculators that use the made-up fixture rates | Kept |
+| tests/test_eval.py:138 | "₹15,000 salary" | Eval question text | Kept |
+| tests/test_sql_guard.py:68 | `{"value": 21000}` | An inline rates fixture that happens to equal the real ESIC ceiling | Changed to a made-up 20000, like the other fixtures |
+
+A new test (`tests/test_deploy.py`) fails if a legal-looking number (PF/EPS/ESIC rates or ceilings) appears in `app/`, `ingest/`, `scripts/` or `frontend/`.
+
+**What to learn:** audit first, then change. A blind search-and-replace for "15000" would have broken the example questions, which are salaries a user typed. Only figures that state the law (rates, ceilings) belong in rates.yaml, with the document they came from.

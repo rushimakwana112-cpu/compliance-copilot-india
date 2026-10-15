@@ -1050,17 +1050,17 @@ function demoAnswer(q, scope) {
     return { type: "not_found", answer: "I couldn't find this in my documents. I only cover Indian central and state labour and payroll rules, so I won't guess. Please check that country's official labour-law sources." };
   }
   if (/(pf|provident)/.test(t) && amount) {
-    const emp = amount * 0.12, epsBase = Math.min(amount, 15000), eps = epsBase * 0.0833, er = amount * 0.12, epf = er - eps;
+    // No legal figures in the frontend: offline the rates are [placeholders].
     return {
       type: "tool", tool: `pf_calculator(basic=${amount})`,
       answer: `PF split for a basic wage of ${fmtINR(amount)} per month (contributions on actual basic):`,
       table: { columns: ["Component", "Basis", "Amount"], totalRow: true, rows: [
-        ["Employee PF", "12% of basic", fmtINR(emp)],
-        ["Employer → EPS", `8.33% of ${fmtINR(epsBase)} (wage cap)`, fmtINR(eps)],
-        ["Employer → EPF", "12% minus EPS share", fmtINR(epf)],
-        ["Total to PF", "", fmtINR(emp + er)]
+        ["Employee PF", "[employee rate] of basic", "[amount]"],
+        ["Employer → EPS", "[EPS rate] of basic up to the [EPS wage cap]", "[amount]"],
+        ["Employer → EPF", "[employer rate] minus EPS share", "[amount]"],
+        ["Total to PF", "", "[amount]"]
       ]},
-      note: "Arithmetic is done by Python, not the model. Rates come from the cited circular.",
+      note: "Arithmetic is done by Python, not the model. Rates come from data/rates.yaml and the cited circular.",
       citations: [{ doc: "EPFO contribution-rate circular", section: "[para]", page: "", score: null, snippet: "Effective [date]", url: "" }]
     };
   }

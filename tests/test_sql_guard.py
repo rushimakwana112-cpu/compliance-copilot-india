@@ -65,7 +65,7 @@ def test_run_retries_once_then_answers(services, llm, tmp_path):
     replies = iter(['{"sql": "SELECT * FROM salaries"}',
                     '{"sql": "SELECT emp_id, name, gross FROM employees WHERE gross > :esic_ceiling"}'])
     llm.responder = lambda m, j: next(replies)
-    rates = {"esic": {"wage_ceiling": {"value": 21000, "source_doc": "x"}}}
+    rates = {"esic": {"wage_ceiling": {"value": 20000, "source_doc": "x"}}}
     out = sql_agent.run(services, "Which sample employees are above the ESIC limit?", rates)
     assert out.type == "sql" and out.rows_scanned == 25
     assert "unknown table 'salaries'" in llm.calls[-1][1]["content"]  # the retry saw the error
