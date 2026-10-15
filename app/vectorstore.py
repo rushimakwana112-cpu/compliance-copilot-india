@@ -19,7 +19,8 @@ from typing import Any, Protocol
 EMBED_DIM = 1024  # bge-m3 output size
 EMBED_BATCH = 32
 RECORD_BATCH = 96  # Pinecone's per-request limit for upsert_records with integrated embedding
-FIELDS = ["doc", "section", "page", "text", "scope", "status", "effective_date", "doc_type", "source_url"]
+FIELDS = ["doc", "section", "page", "text", "scope", "status", "effective_date", "doc_type", "source_url",
+          "chunk_no", "chapter", "heading", "term"]
 
 
 class StoreError(RuntimeError):

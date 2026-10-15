@@ -42,11 +42,13 @@ def build_records(doc: str, chunks: list[Chunk], meta: dict[str, str]) -> list[d
     """Store records: the chunk text plus the metadata the retriever and the citations need."""
     return [
         {
-            "id": vector_id(doc, c.page, c.chunk_no),
+            "id": vector_id(doc, c.page, c.chunk_no),  # chunk_no is unique per document
             "text": c.text,
-            # bge-m3 works best with the section heading in the embedded text, so headings are searchable.
-            "embed_text": f"{c.section}\n{c.text}" if c.section else c.text,
-            "metadata": {"doc": doc, "section": c.section, "page": c.page, **{k: meta.get(k, "") for k in META_FIELDS}},
+            # bge-m3 works best with the headings in the embedded text, so they are searchable.
+            "embed_text": "\n".join(x for x in (c.chapter, c.section, c.text) if x),
+            "metadata": {"doc": doc, "section": c.section, "page": int(c.page), "chunk_no": c.chunk_no,
+                         "chapter": c.chapter, "heading": c.heading, "term": c.term,
+                         **{k: meta.get(k, "") for k in META_FIELDS}},
         }
         for c in chunks
     ]

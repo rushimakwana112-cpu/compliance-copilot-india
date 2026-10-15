@@ -56,7 +56,7 @@ def ingest_file(path: Path, meta: dict[str, str], store: VectorStore | None, *, 
     pages = parse(path)
     if not pages:
         return Outcome(doc, "failed: no text extracted (scanned PDF without OCR?)")
-    chunks = chunk_pages(pages, meta.get("doc_type", "act"))
+    chunks = chunk_pages(pages, meta.get("doc_type", "act"), doc=doc)
     # Delete old vectors only if this doc was indexed before from a different file version.
     replace = bool(entry.get("indexed_sha256")) and entry["indexed_sha256"] != sha
     with tqdm(total=len(chunks), desc=f"  index {doc[:40]}", unit="chunk", leave=False) as bar:
