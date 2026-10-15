@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
-Route = Literal["rag", "tool", "sql", "not_found"]
+Route = Literal["rag", "tool", "sql", "not_found", "error"]  # error: the search itself failed
+MAX_MESSAGE_CHARS = 1000
+MAX_HISTORY_MESSAGES = 8  # 4 turns of user + assistant
 
 
 class Turn(BaseModel):
@@ -26,9 +28,15 @@ class JurisdictionIn(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=2000)
+    message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     history: list[Turn] = Field(default_factory=list)
     jurisdiction: JurisdictionIn = Field(default_factory=JurisdictionIn)
+
+    @field_validator("history")
+    @classmethod
+    def last_turns(cls, history: list[Turn]) -> list[Turn]:
+        """Only the last 4 turns are used, and each is capped, so a long chat can't inflate the prompt."""
+        return [Turn(role=t.role, content=t.content[:4000]) for t in history[-MAX_HISTORY_MESSAGES:]]
 
 
 class ScopeOut(BaseModel):
@@ -41,7 +49,7 @@ class ScopeOut(BaseModel):
 class Citation(BaseModel):
     doc: str
     section: str = ""
-    page: str = ""
+    page: int | None = None  # a whole page number; None when the source has no page (calculators)
     # None for calculator citations, which are not similarity matches.
     score: float | None = None
     snippet: str = ""
@@ -59,13 +67,20 @@ class ChatResponse(BaseModel):
     type: Route
     answer: str
     scope: ScopeOut | None = None
-    citations: list[Citation] = Field(default_factory=list)
+    citations: list[Citation] = Field(default_factory=list)  # the sources the answer cites, as [1], [2]…
+    # Passages that were retrieved and sent to the model but not cited ("Other passages searched").
+    other_citations: list[Citation] = Field(default_factory=list)
     table: Table | None = None
     tool: str | None = None
     sql: str | None = None
     rows_scanned: int | None = None
     note: str | None = None
     latency_ms: int = 0
+    # Set only when true: the provider's free quota is used up / the answer came from the cache.
+    quota_exceeded: bool | None = None
+    # Set only when the provider refused for a rate limit: "minute" (busy, retry soon) or "day".
+    rate_limited: Literal["minute", "day"] | None = None
+    cached: bool | None = None
 
 
 class Health(BaseModel):
@@ -73,7 +88,10 @@ class Health(BaseModel):
     model: str
     pinecone: bool
     docs: int
-    ollama: bool = False
+    provider: str = "groq"
+    embed_provider: str = "pinecone"
+    llm_ok: bool = False
+    public_mode: bool = False
     issues: list[str] = Field(default_factory=list)
 
 

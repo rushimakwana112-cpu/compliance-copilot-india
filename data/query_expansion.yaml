@@ -1,0 +1,40 @@
+# Query expansion: the words people use → the words the law uses.
+#
+# Retrieval searches the question as asked plus up to 2 variants built from this map:
+#   variant 1  the question with each matched term replaced by its first synonym ("contract worker" → "contract labour")
+#   variant 2  the question plus every synonym and topic hint of the matched terms
+# Results are merged by best score per passage, de-duplicated and re-ranked as usual.
+#
+#   terms:    what users type (case-insensitive, whole words; a trailing "s" also matches)
+#   synonyms: the law's wording for the same thing
+#   topics:   where the answer usually lives (document and chapter names), added to variant 2 only
+#
+# No figures here: legal numbers live only in data/rates.yaml.
+
+- terms: ["contract worker", "contract employee", "contractual worker", "contract staff"]
+  synonyms: ["contract labour", "contractor"]
+  topics: []
+
+- terms: ["bonus"]
+  synonyms: []
+  topics: ["payment of bonus", "Code on Wages bonus chapter"]
+
+- terms: ["pf", "epf"]
+  synonyms: ["provident fund", "Employees' Provident Fund"]
+  topics: ["EPF Scheme"]
+
+- terms: ["esic", "esi"]
+  synonyms: ["employees' state insurance"]
+  topics: ["Employees' State Insurance Corporation"]
+
+- terms: ["gratuity"]
+  synonyms: []
+  topics: ["payment of gratuity", "Code on Social Security gratuity chapter"]
+
+- terms: ["overtime", "ot"]
+  synonyms: ["overtime wages", "work in excess of normal hours"]
+  topics: []
+
+- terms: ["minimum wage"]
+  synonyms: ["minimum rate of wages", "floor wage"]
+  topics: ["Code on Wages minimum wages chapter"]

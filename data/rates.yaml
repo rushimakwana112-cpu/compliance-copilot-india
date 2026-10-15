@@ -1,51 +1,84 @@
-# Statutory figures used by the calculators (app/tools.py) and as SQL parameters.
+# Statutory figures used by the calculators (app/tools.py), as SQL parameters, and by GET /api/rates.
 #
 # This is the ONLY place numbers from the law live in this project.
-# Fill each `value` from the official circular/notification and record where it came from.
-# A value left as null makes the calculator answer "rate not configured" instead of guessing.
+# Each figure is a LIST of dated versions, so a change in the law is a new entry, not an edit:
 #
-#   value:          number (rates as fractions, e.g. a 10% rate is 0.10; money in INR per month)
-#   source_doc:     the document the figure comes from (shown to the user as the citation)
+#   value:          number (rates as fractions, e.g. a 10% rate is 0.10; money in INR per month), or null
+#   effective_from: YYYY-MM-DD the version applies from (null = not known yet)
+#   effective_to:   YYYY-MM-DD it stopped applying (null = still applies / not known)
+#   source_doc:     the official document the figure comes from (shown to the user as the citation)
 #   section:        section / para / page in that document
-#   effective_date: YYYY-MM-DD from which the figure applies
+#   status:         current | historical
 #   url:            official link
+#
+# The calculators use the version valid on today's date (or on a date written in the question).
+# When several versions are valid (dates not filled in yet), the `current` one wins.
+# A null value makes the calculator answer "Rate not configured: <field>" instead of guessing.
+# Everything still null, or marked "check", is listed in NEXT_STEPS_FOR_RUSHI.md.
 
 pf:
-  employee_rate:        {value: null, source_doc: "TODO: EPFO contribution-rate circular", section: "", effective_date: null, url: ""}
-  employer_rate:        {value: null, source_doc: "TODO: EPFO contribution-rate circular", section: "", effective_date: null, url: ""}
-  eps_rate:             {value: null, source_doc: "TODO: EPS share of employer contribution (EPFO)", section: "", effective_date: null, url: ""}
-  eps_wage_ceiling:     {value: null, source_doc: "TODO: EPS pensionable wage ceiling (EPFO)", section: "", effective_date: null, url: ""}
+  # Wage ceiling for EPF contributions.
+  wage_ceiling:
+    - {value: 15000, effective_from: null, effective_to: null, status: historical,
+       source_doc: "EPF Scheme, 1952 (wage ceiling before the 2026 notification) - check", section: "", url: ""}
+    - {value: 25000, effective_from: null, effective_to: null, status: current,
+       source_doc: "Gazette notification 17 Sept 2026", section: "",
+       url: "https://www.labour.gov.in/static/uploads/2026/09/2b0f1dbbd3769fc388416186ec145328.pdf"}
+  employee_rate:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "EPF Scheme, 2026", section: "", url: ""}
+  employer_rate:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "EPF Scheme, 2026", section: "", url: ""}
+  eps_rate:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "EPS, 2026", section: "", url: ""}
+  # Pensionable wage cap for the EPS share.
+  eps_wage_cap:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "EPS, 2026", section: "", url: ""}
+  edli_rate:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "EDLI Scheme, 2026", section: "", url: ""}
 
 esic:
-  wage_ceiling:         {value: null, source_doc: "TODO: ESIC wage-ceiling notification", section: "", effective_date: null, url: ""}
-  employee_rate:        {value: null, source_doc: "TODO: ESIC contribution-rate notification", section: "", effective_date: null, url: ""}
-  employer_rate:        {value: null, source_doc: "TODO: ESIC contribution-rate notification", section: "", effective_date: null, url: ""}
+  wage_ceiling:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "ESIC wage-ceiling notification", section: "", url: ""}
+  employee_rate:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "ESIC contribution-rate notification", section: "", url: ""}
+  employer_rate:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "ESIC contribution-rate notification", section: "", url: ""}
 
 gratuity:
-  days_per_year:        {value: null, source_doc: "TODO: Code on Social Security, 2020 (gratuity section)", section: "", effective_date: null, url: ""}
-  wage_days_divisor:    {value: null, source_doc: "TODO: Code on Social Security, 2020 (gratuity section)", section: "", effective_date: null, url: ""}
-  min_years_permanent:  {value: null, source_doc: "TODO: Code on Social Security, 2020 (gratuity section)", section: "", effective_date: null, url: ""}
-  min_years_fixed_term: {value: null, source_doc: "TODO: Code on Social Security, 2020 (gratuity section)", section: "", effective_date: null, url: ""}
+  days_per_year:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Code on Social Security, 2020 (gratuity section)", section: "", url: ""}
+  wage_days_divisor:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Code on Social Security, 2020 (gratuity section)", section: "", url: ""}
+  min_years_permanent:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Code on Social Security, 2020 (gratuity section)", section: "", url: ""}
+  min_years_fixed_term:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Code on Social Security, 2020 (gratuity section)", section: "", url: ""}
   # Months in the final year after which it counts as a full year (null = only completed years count).
-  round_up_after_months: {value: null, source_doc: "TODO: Code on Social Security, 2020 (gratuity section)", section: "", effective_date: null, url: ""}
-  max_amount:           {value: null, source_doc: "TODO: gratuity ceiling notification", section: "", effective_date: null, url: ""}
+  round_up_after_months:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Code on Social Security, 2020 (gratuity section)", section: "", url: ""}
+  max_amount:
+    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Gratuity ceiling notification", section: "", url: ""}
 
-# Professional Tax is a state levy. One block per state id from data/states.yaml.
+# Professional Tax is a state levy. One list of dated versions per state id from data/states.yaml.
 # Slabs are monthly salary ranges: `from` inclusive, `to` inclusive (null `to` = and above).
 professional_tax:
   gujarat:
-    source_doc: "TODO: Gujarat Professional Tax schedule"
-    section: ""
-    effective_date: null
-    url: ""
-    slabs:
-      - {from: null, to: null, monthly_tax: null}
-      - {from: null, to: null, monthly_tax: null}
+    - effective_from: null
+      effective_to: null
+      status: current
+      source_doc: "Gujarat Professional Tax schedule"
+      section: ""
+      url: ""
+      slabs:
+        - {from: null, to: null, monthly_tax: null}
+        - {from: null, to: null, monthly_tax: null}
   maharashtra:
-    source_doc: "TODO: Maharashtra Professional Tax schedule"
-    section: ""
-    effective_date: null
-    url: ""
-    slabs:
-      - {from: null, to: null, monthly_tax: null}
-      - {from: null, to: null, monthly_tax: null}
+    - effective_from: null
+      effective_to: null
+      status: current
+      source_doc: "Maharashtra Professional Tax schedule"
+      section: ""
+      url: ""
+      slabs:
+        - {from: null, to: null, monthly_tax: null}
+        - {from: null, to: null, monthly_tax: null}

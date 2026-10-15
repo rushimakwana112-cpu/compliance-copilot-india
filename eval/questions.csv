@@ -1,31 +1,34 @@
-id,question,type,expected_answer_contains,expected_doc,state,follow_up_of
-q01,"Is ESIC applicable on ₹24,000 gross?",rag,ceiling,ESIC|Code on Social Security,gujarat,
-q02,Who is eligible for gratuity under the Code on Social Security?,rag,continuous service,Code on Social Security,gujarat,
-q03,and for fixed-term employees?,rag,fixed,Code on Social Security,gujarat,q02
-q04,Gratuity rule for fixed-term employees,rag,fixed,Code on Social Security,gujarat,
-q05,What is the definition of wages under the Code on Wages?,rag,wages,Code on Wages,gujarat,
-q06,What is the minimum and maximum bonus an employee can get?,rag,bonus,Code on Wages,gujarat,
-q07,Is bonus paid to contract workers too?,rag,bonus|contract,Code on Wages,gujarat,q06
-q08,When must the employer deposit PF contributions each month?,rag,due|deposit,EPFO,gujarat,
-q09,"Professional tax for ₹15,000 salary in Ahmedabad",rag,professional tax,Gujarat Professional Tax,gujarat,
-q10,What about Maharashtra?,rag,maharashtra,Maharashtra,gujarat,q09
-q11,Compare Gujarat and Maharashtra professional tax,rag,gujarat,Professional Tax,gujarat,
-q12,Does TDS apply on salary below the basic exemption limit?,rag,tds|exemption,TDS,gujarat,
-q13,Are contract workers covered by ESIC under the Code on Social Security?,rag,contract,Code on Social Security|ESIC,gujarat,
-q14,Is overtime paid at a higher rate than ordinary wages?,rag,overtime,Code on Wages,gujarat,
-q15,Can an employer deduct wages for absence from duty?,rag,deduct,Code on Wages,gujarat,
-q16,What did the old Payment of Gratuity Act say about eligibility?,rag,repealed|act,Payment of Gratuity Act,gujarat,
-q17,"Calculate PF for basic ₹18,000",tool,pf|rate not configured,EPFO,gujarat,
-q18,"and for basic ₹25,000?",tool,pf|rate not configured,EPFO,gujarat,q17
-q19,How much ESIC on gross 15000?,tool,esic|rate not configured,ESIC,gujarat,
-q20,"Calculate professional tax on ₹15,000 salary in Surat",tool,professional tax|rate not configured,Gujarat Professional Tax,gujarat,
-q21,"Calculate gratuity for last basic + DA ₹40,000 and 7 years",tool,gratuity|rate not configured,Code on Social Security,gujarat,
-q22,Which sample employees are above the ESIC limit?,sql,rows|no sample|rate not configured,,gujarat,
-q23,Which of them joined before 2020?,sql,rows|no sample|rate not configured,,gujarat,q22
-q24,How many of our staff are in Gujarat?,sql,result,,gujarat,
-q25,List the fixed-term employees in the sample data,sql,rows,,gujarat,
-q26,Gratuity rule in Dubai?,not_found,,,gujarat,
-q27,What is the minimum wage in California?,not_found,,,gujarat,
-q28,Which stock should I buy with my PF withdrawal?,not_found,,,gujarat,
-q29,Explain GST input tax credit rules,not_found,,,gujarat,
-q30,Who won the IPL in 2024?,not_found,,,gujarat,
+id,question,type,expected_answer_contains,expected_doc,state,follow_up_of,requires_doc
+q01,"Is ESIC applicable on ₹24,000 gross?",rag,ceiling,ESIC|Code on Social Security,gujarat,,ESIC
+q02,Who is eligible for gratuity under the Code on Social Security?,rag,continuous service,Code on Social Security,gujarat,,
+q03,and for fixed-term employees?,rag,fixed,Code on Social Security,gujarat,q02,
+q04,Gratuity rule for fixed-term employees,rag,fixed,Code on Social Security,gujarat,,
+q05,What is the definition of wages under the Code on Wages?,rag,wages,Code on Wages,gujarat,,
+q06,What is the minimum and maximum bonus an employee can get?,rag,bonus,Code on Wages,gujarat,,
+q07,Is bonus paid to contract workers too?,rag,bonus|contract,Code on Wages,gujarat,q06,
+q08,When must the employer deposit PF contributions each month?,rag,due|deposit,EPFO,gujarat,,EPF Scheme|Employees' Provident Funds Scheme
+q09,"Professional tax for ₹15,000 salary in Ahmedabad",rag,professional tax,Gujarat Professional Tax,gujarat,,Gujarat Professional Tax|Gujarat PT
+q10,What about Maharashtra?,rag,maharashtra,Maharashtra,gujarat,q09,Maharashtra Professional Tax|Maharashtra PT
+q11,Compare Gujarat and Maharashtra professional tax,rag,gujarat,Professional Tax,gujarat,,Gujarat Professional Tax|Gujarat PT&Maharashtra Professional Tax|Maharashtra PT
+q12,Does TDS apply on salary below the basic exemption limit?,rag,tds|exemption,TDS,gujarat,,TDS|Income-tax|Income Tax|CBDT
+q13,Are contract workers covered by ESIC under the Code on Social Security?,rag,contract,Code on Social Security|ESIC,gujarat,,
+q14,Is overtime paid at a higher rate than ordinary wages?,rag,overtime,Code on Wages,gujarat,,
+q15,Can an employer deduct wages for absence from duty?,rag,deduct,Code on Wages,gujarat,,
+q16,What did the old Payment of Gratuity Act say about eligibility?,rag,repealed|act,Payment of Gratuity Act,gujarat,,Payment of Gratuity Act
+q17,"Calculate PF for basic ₹18,000",tool,pf|rate not configured,EPFO,gujarat,,
+q18,"and for basic ₹25,000?",tool,pf|rate not configured,EPFO,gujarat,q17,
+q19,How much ESIC on gross 15000?,tool,esic|rate not configured,ESIC,gujarat,,
+q20,"Calculate professional tax on ₹15,000 salary in Surat",tool,professional tax|rate not configured,Gujarat Professional Tax,gujarat,,
+q21,"Calculate gratuity for last basic + DA ₹40,000 and 7 years",tool,gratuity|rate not configured,Code on Social Security,gujarat,,
+q22,Which sample employees are above the ESIC limit?,sql,rows|no sample|rate not configured,,gujarat,,
+q23,Which of them joined before 2020?,sql,rows|no sample|rate not configured,,gujarat,q22,
+q24,How many of our staff are in Gujarat?,sql,result,,gujarat,,
+q25,List the fixed-term employees in the sample data,sql,rows,,gujarat,,
+q26,Gratuity rule in Dubai?,not_found,only cover Indian law,,gujarat,,
+q27,What is the minimum wage in California?,not_found,,,gujarat,,
+q28,Which stock should I buy with my PF withdrawal?,not_found,,,gujarat,,
+q29,Explain GST input tax credit rules,not_found,,,gujarat,,
+q30,Who won the IPL in 2024?,not_found,,,gujarat,,
+q31,Definition of wages under the Code on Wages,rag,remuneration&basic pay&does not include|shall not include|exclud&provided that|proviso|one-half|half|50,Code on Wages,gujarat,,
+q32,Who is covered for gratuity under the SS Code,rag,continuous service&establishment|factor,Code on Social Security,gujarat,,
+q33,What is a fixed term employee?,rag,fixed term&written contract|fixed period,Code on Social Security|Industrial Relations,gujarat,,

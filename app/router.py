@@ -59,6 +59,9 @@ def route_llm(llm: LLM, question: str) -> Path_:
     except LLMError:
         return route_rules(question)
     value = (parse_json(reply) or {}).get("route")
+    if value not in ("tool", "sql", "rag"):  # not JSON: accept a reply that names exactly one route
+        found = set(re.findall(r"\b(tool|sql|rag)\b", reply.lower()))
+        value = found.pop() if len(found) == 1 else None
     return value if value in ("tool", "sql", "rag") else route_rules(question)
 
 

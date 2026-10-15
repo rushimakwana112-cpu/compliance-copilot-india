@@ -34,7 +34,7 @@ def test_health_reports_ollama_down(services, llm):
     with TestClient(create_app(services)) as c:
         body = c.get("/api/health").json()
     assert body["status"] == "degraded"
-    assert body["ollama"] is False
+    assert body["llm_ok"] is False
     assert any("Ollama" in i for i in body["issues"])
 
 
@@ -76,9 +76,26 @@ def test_chat_rag_contract(services, store, llm):
     assert isinstance(body["latency_ms"], int)
 
 
-def test_chat_not_found_contract(client):
-    body = client.post("/api/chat", json={"message": "Gratuity rule in Dubai?"}).json()
+def test_chat_not_found_contract(client, store):
+    store.add("Monthly professional tax slab table", doc="Gujarat PT schedule", page=1, scope="gujarat",
+              status="current", doc_type="notification")
+    body = client.post("/api/chat", json={"message": "Gratuity rule for astronauts?"}).json()
     assert body["type"] == "not_found" and body["citations"] == []
+
+
+def test_chat_search_failure_is_an_error_not_a_silent_not_found(client, store, caplog):
+    # Empty index: 0 matches means a wrong index or filter, so it must not look like "not in my documents".
+    body = client.post("/api/chat", json={"message": "Gratuity rule for astronauts?"}).json()
+    assert body["type"] == "error" and body["answer"].startswith("Search failed: ")
+    assert "0 matches" in body["answer"]
+    assert any(r.levelname == "WARNING" and "Search failed" in r.getMessage() for r in caplog.records)
+
+    def boom(*a, **k):
+        raise ConnectionError("pinecone unreachable")
+
+    store.search = boom
+    body = client.post("/api/chat/stream", json={"message": "Gratuity rule in Kerala for astronauts?"}).text
+    assert '"type": "error"' in body and "Search failed: ConnectionError: pinecone unreachable" in body
 
 
 def test_chat_stream_events(services, store, llm):
@@ -113,3 +130,23 @@ def test_ingest_file_shows_in_documents(client, act_pdf, monkeypatch, tmp_path):
     assert r.status_code == 200 and r.json()["name"] == "EPFO circular"
     docs = {d["name"]: d for d in client.get("/api/documents").json()}
     assert docs["EPFO circular"]["scope"] == "gujarat"  # indexed in the background by the time we ask
+
+
+@pytest.mark.parametrize("endpoint", ["/api/chat", "/api/chat/stream"])
+def test_foreign_place_is_refused_without_retrieval_or_llm(services, store, llm, endpoint):
+    store.add("gratuity rule for employees", doc="SS Code", page=1, scope="central", status="current", doc_type="act")
+    with TestClient(create_app(services)) as c:
+        r = c.post(endpoint, json={"message": "Gratuity rule in Dubai?"})
+    assert "I only cover Indian law" in r.text and "Dubai" in r.text and '"not_found"' in r.text
+    assert store.searches == [] and llm.calls == []
+
+
+def test_rates_endpoint_lists_figures_with_sources(services):
+    with TestClient(create_app(services)) as c:
+        body = c.get("/api/rates", params={"on": "2026-10-15"}).json()
+        bad = c.get("/api/rates", params={"on": "not-a-date"})
+    assert body["date"] == "2026-10-15"
+    ceiling = body["rates"]["pf.wage_ceiling"]
+    assert ceiling["value"] == 25000 and ceiling["source_doc"] == "Gazette notification 17 Sept 2026"
+    assert "pf.employee_rate" in body["rates"] and body["rates"]["pf.employee_rate"]["value"] is None
+    assert "gujarat" in body["professional_tax"] and bad.status_code == 422

@@ -1,4 +1,7 @@
-"""Step 4 of ingestion: embed chunks with bge-m3 and upsert them to Pinecone.
+"""Step 4 of ingestion: upsert chunks to Pinecone (the store embeds them).
+
+With EMBED_PROVIDER=pinecone, Pinecone embeds the text server-side; with
+EMBED_PROVIDER=ollama the store calls bge-m3 first. This file doesn't care.
 
 Vector ids are deterministic: `<doc-slug>#sha1(doc + page + chunk_no)`. Running
 ingestion twice therefore overwrites the same vectors instead of adding
@@ -14,13 +17,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.llm import LLM
 from app.vectorstore import VectorStore
 from ingest.chunk import Chunk
 from ingest.download import slugify
 
 log = logging.getLogger("ingest")
-EMBED_BATCH = 32
+BATCH = 32
 META_FIELDS = ("scope", "status", "effective_date", "doc_type", "source_url")
 
 
@@ -36,22 +38,27 @@ def vector_id(doc: str, page: int, chunk_no: int) -> str:
     return f"{slugify(doc)}#{digest}"
 
 
-def build_records(doc: str, chunks: list[Chunk], vectors: list[list[float]], meta: dict[str, str]) -> list[dict[str, Any]]:
-    """Pinecone records with the metadata the retriever and the citations need."""
+def build_records(doc: str, chunks: list[Chunk], meta: dict[str, str]) -> list[dict[str, Any]]:
+    """Store records: the chunk text plus the metadata the retriever and the citations need."""
     return [
         {
-            "id": vector_id(doc, c.page, c.chunk_no),
-            "values": v,
-            "metadata": {
-                "doc": doc,
-                "section": c.section,
-                "page": c.page,
-                "text": c.text,
-                **{k: meta.get(k, "") for k in META_FIELDS},
-            },
+            "id": vector_id(doc, c.page, c.chunk_no),  # chunk_no is unique per document
+            "text": c.text,
+            # bge-m3 works best with the headings in the embedded text, so they are searchable.
+            "embed_text": "\n".join(x for x in (c.chapter, c.section, c.text) if x),
+            "metadata": {"doc": doc, "section": c.section, "page": int(c.page), "chunk_no": c.chunk_no,
+                         "chapter": c.chapter, "heading": c.heading, "term": c.term,
+                         **{k: meta.get(k, "") for k in META_FIELDS}, "status": chunk_status(c, meta)},
         }
-        for c, v in zip(chunks, vectors)
+        for c in chunks
     ]
+
+
+def chunk_status(c: Chunk, meta: dict[str, str]) -> str:
+    """End matter of a current Act (Statement of Objects and Reasons, Notes on Clauses) is 'commentary':
+    it explains the law but is not the law, so retrieval ranks it below the operative text."""
+    status = meta.get("status", "") or "current"
+    return "commentary" if c.kind == "commentary" and status == "current" else status
 
 
 def stale_ids(store: VectorStore, doc: str) -> list[str]:
@@ -63,14 +70,13 @@ def index_document(
     doc: str,
     chunks: list[Chunk],
     meta: dict[str, str],
-    llm: LLM,
     store: VectorStore,
     *,
     replace: bool = False,
     dry_run: bool = False,
     progress: Callable[[int], None] | None = None,
 ) -> IndexResult:
-    """Embed and upsert one document.
+    """Upsert one document.
 
     `replace=True` (the file's hash changed) first deletes that document's old
     vectors, because a shorter new version would otherwise leave orphan chunks.
@@ -83,13 +89,9 @@ def index_document(
     if old:
         log.info("%s changed: deleting %d old vectors", doc, len(old))
         store.delete(old)
-    records: list[dict[str, Any]] = []
-    for i in range(0, len(chunks), EMBED_BATCH):
-        batch = chunks[i : i + EMBED_BATCH]
-        # bge-m3 works best on the passage text itself; we prefix the section so headings are searchable.
-        vectors = llm.embed([f"{c.section}\n{c.text}" if c.section else c.text for c in batch])
-        records.extend(build_records(doc, batch, vectors, meta))
+    records = build_records(doc, chunks, meta)
+    for i in range(0, len(records), BATCH):
+        store.upsert(records[i : i + BATCH])
         if progress:
-            progress(len(batch))
-    store.upsert(records)
+            progress(len(records[i : i + BATCH]))
     return IndexResult(doc, len(records), len(old))

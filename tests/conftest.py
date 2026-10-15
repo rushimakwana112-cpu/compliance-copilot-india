@@ -76,8 +76,11 @@ class FakeStore:
 
     def __init__(self) -> None:
         self.records: dict[str, dict[str, Any]] = {}
+        self.searches: list[str] = []
 
-    def query(self, vector: list[float], top_k: int, filter: dict[str, Any]) -> list[Match]:
+    def search(self, text: str, top_k: int, filter: dict[str, Any]) -> list[Match]:
+        self.searches.append(text)
+        vector = fake_embed(text)
         scored = [
             Match(rid, sum(a * b for a, b in zip(vector, r["values"])), r["metadata"])
             for rid, r in self.records.items()
@@ -86,8 +89,10 @@ class FakeStore:
         return sorted(scored, key=lambda m: m.score, reverse=True)[:top_k]
 
     def upsert(self, records: list[dict[str, Any]]) -> None:
+        """Same record shape the real stores take: {"id", "text", "metadata"}."""
         for r in records:
-            self.records[r["id"]] = r
+            self.records[r["id"]] = {"id": r["id"], "values": fake_embed(r["text"]),
+                                     "metadata": {**r["metadata"], "text": r["text"]}}
 
     def list_ids(self, prefix: str) -> list[str]:
         return [i for i in self.records if i.startswith(prefix)]
