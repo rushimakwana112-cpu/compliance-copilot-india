@@ -19,6 +19,8 @@ def test_index_serves_frontend(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "Compliance Copilot" in r.text
+    # without it, browsers kept showing the old page after a deploy (seen on the live site)
+    assert r.headers["cache-control"] == "no-cache"
 
 
 def test_health_shape(client):

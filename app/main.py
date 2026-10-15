@@ -87,7 +87,8 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
-        return FileResponse(FRONTEND_DIR / "index.html")
+        # no-cache = "check with the server first" (a cheap 304 via the ETag), so a deploy reaches returning visitors
+        return FileResponse(FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, bool]:

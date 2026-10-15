@@ -277,3 +277,9 @@ Known limitation, not changed: the rate limiter reads the client IP from the *fi
 Eval: the second real run (after fixes 1–5) matched the baseline: 100% on every metric, avg prompt 2,963 tokens (+53 from the new prompt rule). Fix 6 was checked offline only (no third run). Offline, the eval's routes are unchanged except q09 ("Professional tax for ₹15,000 salary in Ahmedabad"), which now uses the PT calculator; q09 is skipped in real runs until the Gujarat PT document is indexed, and its expected route should then become `tool`.
 
 **What to learn:** test with the questions users actually type, typos included, not the tidy ones you wrote. A keyword router fails silently when people leave out the keyword, so route on *what the message contains* (a topic and an amount) and carve out the exceptions (questions about the law). And never trust a model to put a control word exactly where you asked; check for it anywhere and decide in code.
+
+## Audit fix 7: visitors kept seeing the old page after a deploy (16 Oct 2026)
+
+**Bug (medium):** after PR #10 was live, the live page in a browser that had visited before still ran the old frontend (Ollama placeholder, no New-chat fix), while a fresh download had the new one. **Cause:** `/` was sent with no `Cache-Control` header, only `Last-Modified` and `ETag`, so browsers cached it "heuristically" (often for hours) without asking the server. **Fix:** `/` is now sent with `Cache-Control: no-cache`, which means "you may keep a copy, but check with me first"; the check is a cheap 304 using the ETag. Test: `test_index_serves_frontend`.
+
+**What to learn:** with no caching header, the browser decides how long to keep a page, so "I deployed it" and "users see it" are different things. For the HTML that loads your app, use `no-cache` so every visit checks for a new version; long caching is for files whose name changes with each version.
