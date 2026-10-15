@@ -12,3 +12,5 @@ How to work with me:
 - Diagnose the cause of errors and eval failures before changing code.
 - Run the tests after each step, commit per step, and push to feature/groq-cloud.
 - Keep explanations simple; I'm learning. Add what I should learn to docs/build-log.md.
+
+Full project context (stack, Git workflow, what is done, open items, plan): read docs/PROJECT_CONTEXT.md at the start of every session.

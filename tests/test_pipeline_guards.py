@@ -13,6 +13,7 @@ def chat(services, message, history=()):
 def test_personal_record_needs_no_search_or_model(services, store, llm):
     resp, turn = chat(services, "What is my salary?")
     assert turn.route == "guide" and resp.type == "guide" and store.searches == [] and llm.calls == []
+    assert resp.scope is not None  # the page shows "Central + Gujarat" like every other answer
 
 
 def test_sample_data_questions_get_no_data_by_default(services, llm):
