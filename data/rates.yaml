@@ -146,3 +146,195 @@ due_dates:
     maharashtra:
       - {value: null, effective_from: null, effective_to: null, status: current,
          source_doc: "Maharashtra Profession Tax Act, 1975 and Rules", section: "", url: ""}
+
+# Income tax on salary, tax year 2026-27 (Income-tax Act, 2025, in force from 1 April 2026). Used by app/tax.py.
+# Slabs: `from` is exclusive (income above it), `to` inclusive, `rate` a fraction.
+income_tax:
+  new_regime_slabs:
+    - effective_from: 2026-04-01
+      effective_to: null
+      status: current
+      source_doc: "Income-tax Act, 2025"
+      section: "s.202(1) (new regime, formerly s.115BAC)"
+      url: "https://www.incometaxindia.gov.in/w/section-202-78"
+      slabs:
+        - {from: 0, to: 400000, rate: 0}
+        - {from: 400000, to: 800000, rate: 0.05}
+        - {from: 800000, to: 1200000, rate: 0.10}
+        - {from: 1200000, to: 1600000, rate: 0.15}
+        - {from: 1600000, to: 2000000, rate: 0.20}
+        - {from: 2000000, to: 2400000, rate: 0.25}
+        - {from: 2400000, to: null, rate: 0.30}
+  old_regime_slabs:
+    - effective_from: 2026-04-01
+      effective_to: null
+      status: current
+      source_doc: "Income Tax Department: FAQs on Computation of Tax (old regime, below 60)"
+      section: "Finance Act 2026, First Schedule"
+      url: "https://www.incometaxindia.gov.in/documents/d/guest/faqs-on-computation-of-tax"
+      slabs:
+        - {from: 0, to: 250000, rate: 0}
+        - {from: 250000, to: 500000, rate: 0.05}
+        - {from: 500000, to: 1000000, rate: 0.20}
+        - {from: 1000000, to: null, rate: 0.30}
+  old_regime_slabs_senior:  # resident aged 60 to 79
+    - effective_from: 2026-04-01
+      effective_to: null
+      status: current
+      source_doc: "Income Tax Department: FAQs on Computation of Tax (old regime, 60 to 79)"
+      section: "Finance Act 2026, First Schedule"
+      url: "https://www.incometaxindia.gov.in/documents/d/guest/faqs-on-computation-of-tax"
+      slabs:
+        - {from: 0, to: 300000, rate: 0}
+        - {from: 300000, to: 500000, rate: 0.05}
+        - {from: 500000, to: 1000000, rate: 0.20}
+        - {from: 1000000, to: null, rate: 0.30}
+  old_regime_slabs_super_senior:  # resident aged 80 or more
+    - effective_from: 2026-04-01
+      effective_to: null
+      status: current
+      source_doc: "Income Tax Department: FAQs on Computation of Tax (old regime, 80 and above)"
+      section: "Finance Act 2026, First Schedule"
+      url: "https://www.incometaxindia.gov.in/documents/d/guest/faqs-on-computation-of-tax"
+      slabs:
+        - {from: 0, to: 500000, rate: 0}
+        - {from: 500000, to: 1000000, rate: 0.20}
+        - {from: 1000000, to: null, rate: 0.30}
+  standard_deduction_new:
+    - {value: 75000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.19(1) Table Sl. 2(a)", url: "https://www.incometaxindia.gov.in/w/section-19-206"}
+  standard_deduction_old:
+    - {value: 50000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.19(1) Table Sl. 2(b)", url: "https://www.incometaxindia.gov.in/w/section-19-206"}
+  rebate_new_income_limit:
+    - {value: 1200000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.156(2) (rebate, formerly s.87A)", url: "https://www.incometaxindia.gov.in/w/section-156-84"}
+  rebate_new_max:
+    - {value: 60000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.156(2)(a)", url: "https://www.incometaxindia.gov.in/w/section-156-84"}
+  rebate_old_income_limit:
+    - {value: 500000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.156(1)", url: "https://www.incometaxindia.gov.in/w/section-156-84"}
+  rebate_old_max:
+    - {value: 12500, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.156(1)", url: "https://www.incometaxindia.gov.in/w/section-156-84"}
+  cess_rate:
+    - {value: 0.04, effective_from: 2026-04-01, effective_to: null, status: current,
+       source_doc: "Income Tax Department: FAQs on Computation of Tax", section: "Health and Education Cess",
+       url: "https://www.incometaxindia.gov.in/documents/d/guest/faqs-on-computation-of-tax"}
+  # Surcharge on income above `from` (marginal relief applied in app/tax.py). The new regime stops at 25%.
+  surcharge_old:
+    - effective_from: 2026-04-01
+      effective_to: null
+      status: current
+      source_doc: "Income Tax Department: FAQs on Computation of Tax"
+      section: "Surcharge"
+      url: "https://www.incometaxindia.gov.in/documents/d/guest/faqs-on-computation-of-tax"
+      slabs:
+        - {from: 5000000, to: 10000000, rate: 0.10}
+        - {from: 10000000, to: 20000000, rate: 0.15}
+        - {from: 20000000, to: 50000000, rate: 0.25}
+        - {from: 50000000, to: null, rate: 0.37}
+  surcharge_new:
+    - effective_from: 2026-04-01
+      effective_to: null
+      status: current
+      source_doc: "Income Tax Department: FAQs on Computation of Tax"
+      section: "Surcharge (new regime, maximum 25%)"
+      url: "https://www.incometaxindia.gov.in/documents/d/guest/faqs-on-computation-of-tax"
+      slabs:
+        - {from: 5000000, to: 10000000, rate: 0.10}
+        - {from: 10000000, to: 20000000, rate: 0.15}
+        - {from: 20000000, to: null, rate: 0.25}
+  # Deductions. The new regime allows none of these except the employer's NPS contribution (s.202(2)).
+  deduction_s123:  # formerly 80C: PPF, ELSS, life insurance, employee PF, principal of a home loan
+    - {value: 150000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.123 (formerly 80C)", url: "https://www.incometaxindia.gov.in/w/section-123-96"}
+  deduction_s126_self:  # formerly 80D: health insurance for self, spouse and children
+    - {value: 25000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.126(2)(a) (formerly 80D)", url: "https://www.incometaxindia.gov.in/w/section-126-92"}
+  deduction_s126_self_senior:
+    - {value: 50000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.126(8)(a)", url: "https://www.incometaxindia.gov.in/w/section-126-92"}
+  deduction_s126_parents:
+    - {value: 25000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.126(2)(b)", url: "https://www.incometaxindia.gov.in/w/section-126-92"}
+  deduction_s126_parents_senior:
+    - {value: 50000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.126(8)(a)", url: "https://www.incometaxindia.gov.in/w/section-126-92"}
+  deduction_s124_3:  # formerly 80CCD(1B): own NPS contribution, over and above s.123
+    - {value: 50000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.124(3) (formerly 80CCD(1B))", url: "https://www.incometaxindia.gov.in/w/section-124-94"}
+  deduction_home_loan_interest:  # self-occupied house (formerly 24(b))
+    - {value: 200000, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.22(2)(a) (formerly 24(b))", url: "https://www.incometaxindia.gov.in/w/section-22-218"}
+  employer_nps_rate_new:  # employer's NPS contribution as a share of basic + DA (formerly 80CCD(2))
+    - {value: 0.14, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.124(2), s.202", url: "https://www.incometaxindia.gov.in/w/section-124-94"}
+  employer_nps_rate_old:
+    - {value: 0.10, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.124(1)(b)", url: "https://www.incometaxindia.gov.in/w/section-124-94"}
+  # HRA exemption (old regime only): least of HRA received, rent − 10% of salary, 50% / 40% of salary (basic + DA).
+  hra_metro_rate:
+    - {value: 0.50, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Rules, 2026",
+       section: "rule 279", url: "https://www.incometaxindia.gov.in/w/rule-279-1",
+       cities: [Mumbai, Kolkata, Delhi, Chennai, Hyderabad, Pune, Ahmedabad, Bengaluru]}
+  hra_other_rate:
+    - {value: 0.40, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Rules, 2026",
+       section: "rule 279", url: "https://www.incometaxindia.gov.in/w/rule-279-1"}
+  hra_rent_excess_rate:
+    - {value: 0.10, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Rules, 2026",
+       section: "rule 279", url: "https://www.incometaxindia.gov.in/w/rule-279-1"}
+  # Exemption limits under the 2025 Act not yet found in an official notification: left empty.
+  gratuity_exemption_limit:
+    - {value: null, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.19(1) Table Sl. 5-6 (notified amount)", url: "https://www.incometaxindia.gov.in/w/section-19-206"}
+  leave_encashment_exemption_limit:
+    - {value: null, effective_from: 2026-04-01, effective_to: null, status: current, source_doc: "Income-tax Act, 2025",
+       section: "s.19(1) Table Sl. 14 (notified amount)", url: "https://www.incometaxindia.gov.in/w/section-19-206"}
+
+# Statutory bonus (Code on Wages, 2019, Chapter IV, in force 21 Nov 2025). Used by app/labour.py.
+bonus:
+  min_rate:
+    - {value: 0.0833, effective_from: 2025-11-21, effective_to: null, status: current, source_doc: "Code on Wages, 2019",
+       section: "s.26(1)", url: "https://www.labour.gov.in/static/uploads/2025/06/c328da14bbb15fc4ad571dc33e7a4ab3.pdf"}
+  min_amount:
+    - {value: 100, effective_from: 2025-11-21, effective_to: null, status: current, source_doc: "Code on Wages, 2019",
+       section: "s.26(1)", url: "https://www.labour.gov.in/static/uploads/2025/06/c328da14bbb15fc4ad571dc33e7a4ab3.pdf"}
+  max_rate:
+    - {value: 0.20, effective_from: 2025-11-21, effective_to: null, status: current, source_doc: "Code on Wages, 2019",
+       section: "s.26(3)", url: "https://www.labour.gov.in/static/uploads/2025/06/c328da14bbb15fc4ad571dc33e7a4ab3.pdf"}
+  min_days_worked:
+    - {value: 30, effective_from: 2025-11-21, effective_to: null, status: current, source_doc: "Code on Wages, 2019",
+       section: "s.26(1)", url: "https://www.labour.gov.in/static/uploads/2025/06/c328da14bbb15fc4ad571dc33e7a4ab3.pdf"}
+  # Notified under s.26(1) and s.26(2); not yet found on an official site.
+  eligibility_wage_ceiling:
+    - {value: null, effective_from: 2025-11-21, effective_to: null, status: current,
+       source_doc: "MoLE notification under Code on Wages s.26(1)", section: "", url: ""}
+  calculation_ceiling:
+    - {value: null, effective_from: 2025-11-21, effective_to: null, status: current,
+       source_doc: "MoLE notification under Code on Wages s.26(2)", section: "", url: ""}
+
+# Overtime (Code on Wages s.14; OSH Code ss.25, 27) and the wage-rules conversion of daily and hourly rates.
+overtime:
+  rate_multiplier:
+    - {value: 2, effective_from: 2025-11-21, effective_to: null, status: current, source_doc: "Code on Wages, 2019",
+       section: "s.14 (not less than twice the normal rate)", url: "https://www.labour.gov.in/static/uploads/2025/06/c328da14bbb15fc4ad571dc33e7a4ab3.pdf"}
+  hours_per_day:
+    - {value: 8, effective_from: 2026-05-08, effective_to: null, status: current, source_doc: "Code on Wages (Central) Rules, 2026",
+       section: "rule 3(2) (hourly rate = daily rate ÷ 8)", url: "https://www.labour.gov.in/static/uploads/2026/05/6eb0c35ba63b776487a025e5123b6b12.pdf"}
+  days_per_month:
+    - {value: 26, effective_from: 2026-05-08, effective_to: null, status: current, source_doc: "Code on Wages (Central) Rules, 2026",
+       section: "rule 3(2) (monthly rate = daily rate × 26)", url: "https://www.labour.gov.in/static/uploads/2026/05/6eb0c35ba63b776487a025e5123b6b12.pdf"}
+
+# Annual leave with wages (OSH Code, 2020, s.32).
+leave:
+  min_days_worked:
+    - {value: 180, effective_from: 2025-11-21, effective_to: null, status: current, source_doc: "OSH Code, 2020",
+       section: "s.32(1)(i)", url: "https://www.labour.gov.in/static/uploads/2025/07/36fcfa5d8e6b9145e282bf7b950d6c47.pdf"}
+  days_worked_per_leave_day:
+    - {value: 20, effective_from: 2025-11-21, effective_to: null, status: current, source_doc: "OSH Code, 2020",
+       section: "s.32(1)(ii)", url: "https://www.labour.gov.in/static/uploads/2025/07/36fcfa5d8e6b9145e282bf7b950d6c47.pdf"}
+  carry_forward_max:
+    - {value: 30, effective_from: 2025-11-21, effective_to: null, status: current, source_doc: "OSH Code, 2020",
+       section: "s.32(1)(vii)", url: "https://www.labour.gov.in/static/uploads/2025/07/36fcfa5d8e6b9145e282bf7b950d6c47.pdf"}

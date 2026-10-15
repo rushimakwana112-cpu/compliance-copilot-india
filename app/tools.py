@@ -120,11 +120,12 @@ def resolved(rates: dict[str, Any], on: date | None = None) -> dict[str, Any]:
     """Every figure as it applies on `on`, for GET /api/rates. Null values are listed, not hidden."""
     on = on or date.today()
     out: dict[str, Any] = {"date": on.isoformat(), "rates": {}, "professional_tax": {}, "due_dates": {}}
-    for group in ("pf", "esic", "gratuity"):
+    for group in ("pf", "esic", "gratuity", "income_tax", "bonus", "overtime", "leave"):
         for name, node in (rates.get(group) or {}).items():
             v = pick(node, on)
             out["rates"][f"{group}.{name}"] = {
                 "value": None if v is None else v.get("value"),
+                **({"slabs": v["slabs"]} if v and v.get("slabs") else {}),
                 **({k: (None if (x := (v or {}).get(k)) in (None, "") else str(x))
                     for k in ("effective_from", "effective_to", "source_doc", "section", "status", "url")}),
             }

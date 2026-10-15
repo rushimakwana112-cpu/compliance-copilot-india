@@ -19,7 +19,7 @@ from typing import Any
 
 from datetime import date
 
-from app import guards, lang, logs, rag, salary, sql_agent, tools
+from app import guards, labour, lang, logs, rag, salary, sql_agent, tax, tools
 from app.jurisdiction import Scope, detect_states, foreign_place, resolve
 from app.llm import LLMError, RateLimited
 from app.router import route
@@ -86,12 +86,20 @@ def early(services: Services, req: ChatRequest, which: str) -> tuple[Turn, ChatR
     trace = rag.Trace(index=services.settings.pinecone_index)
     if (resp := guards.check(req.message)) is not None:
         return Turn(req.message, req.message, scope, "guide", trace, which), resp
-    if salary.wants(req.message, req.history):
-        resp = salary.run(req.message, req.history, scope.primary, None, date.today())
-        if resp is not None:
-            resp.scope = _scope_out(scope)
-            return Turn(req.message, req.message, scope, "tool", trace, which), resp
-    return None
+    text, history, today = req.message, req.history, date.today()
+    resp = None
+    if salary.ctc_conversation(text, history):  # a reply to the CTC questions comes first
+        resp = salary.run(text, history, scope.primary, None, today)
+    elif tax.wants(text):
+        resp = tax.run(text, scope.primary, None, today)
+    elif labour.wants(text):
+        resp = labour.run(text, None, today)
+    elif salary.wants(text, history):
+        resp = salary.run(text, history, scope.primary, None, today)
+    if resp is None:
+        return None
+    resp.scope = _scope_out(scope)
+    return Turn(text, text, scope, "tool", trace, which), resp
 
 
 def finish(services: Services, turn: Turn, resp: ChatResponse) -> ChatResponse:
