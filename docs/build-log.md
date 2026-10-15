@@ -219,3 +219,11 @@ A new test (`tests/test_deploy.py`) fails if a legal-looking number (PF/EPS/ESIC
 **What changed:** `test_no_secret_in_git_history` crashed on Windows with `TypeError: expected string or bytes-like object, got 'NoneType'`. The tests now read git output with `encoding="utf-8", errors="replace"`.
 
 **What to learn:** `subprocess.run(..., text=True)` decodes with the system's default encoding, which is cp1252 on Windows. The git history now contains ₹ and Hindi/Gujarati text (UTF-8), which cp1252 can't decode. On Windows that error happens in a background reader thread, so instead of a clear `UnicodeDecodeError` you get `stdout = None` and a confusing `TypeError` later. Always name the encoding when reading another program's output.
+
+## Audit fix 1: a health check that never waits (16 Oct 2026)
+
+**Bug (medium):** the live page could sit on "Checking…" with the sidebar saying "Ollama · qwen2.5:7b", and Render once showed HTTP 503. **Cause:** `/api/health` asks Groq for its model list through the same helper as a chat call, so a busy minute (429) made it sleep up to 20 s and retry, and a timeout made it wait 30 s, back off and try again: up to about a minute. Render's health check (`healthCheckPath: /api/health`) and the page's status pill were both waiting on that. The sidebar's model text was a hard-coded placeholder from the local Ollama setup, shown until health answered and kept forever in demo mode.
+
+**Fix:** Render now checks `/healthz` (no outside calls). `/api/health` lists models with a 5 s timeout and no retries or waits; a busy 429 still counts as "key works". The sidebar shows "Checking…" until health answers and "Offline (demo)" if it never does. Tests: `test_groq_health_never_waits_or_retries`, `test_render_blueprint_matches_the_deploy_plan`, `test_publish_readiness`.
+
+**What to learn:** a *liveness* check ("is the process up?") and a *readiness/status* check ("are my dependencies OK?") are different jobs. The platform's restart decision should depend only on the first, so a slow third party can't make your app look dead. Retries belong on user requests, never on health checks: a health check should answer fast and report the problem, not hide it by waiting.

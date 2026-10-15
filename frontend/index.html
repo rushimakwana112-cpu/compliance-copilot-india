@@ -478,8 +478,8 @@ pre.code {
       <section style="margin-top:auto">
         <h2 class="section-title">Pipeline</h2>
         <dl class="kv">
-          <dt>LLM</dt><dd id="kvModel">Ollama · qwen2.5:7b</dd>
-          <dt>Embeddings</dt><dd id="kvEmbed">bge-m3</dd>
+          <dt>LLM</dt><dd id="kvModel">Checking…</dd>
+          <dt>Embeddings</dt><dd id="kvEmbed">Checking…</dd>
           <dt>Vector DB</dt><dd>Pinecone</dd>
           <dt>Data</dt><dd>rates.yaml + your figures</dd>
           <dt>Mode</dt><dd id="modeLabel">demo</dd>
@@ -1280,6 +1280,7 @@ async function checkHealth() {
     $("statusText").textContent = "Demo mode";
     $("statusPill").title = "Backend offline: answers are demo placeholders";
     $("modeLabel").textContent = "demo";
+    $("kvModel").textContent = $("kvEmbed").textContent = "Offline (demo)";
   }
   renderScopeLine();
 }

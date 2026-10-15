@@ -204,6 +204,7 @@ class GroqClient:
     provider = "groq"
     embed_model = ""
     HEALTH_TTL = 60.0  # seconds; health is polled, model listing is not free of rate limits
+    HEALTH_TIMEOUT = 5.0  # seconds; a health check must answer fast or report the problem
 
     def __init__(self, api_key: str, model: str, *, temperature: float = 0.1, max_tokens: int = 700,
                  timeout: float = 30.0, backoff: float = 1.5, client: Any = None,
@@ -238,12 +239,12 @@ class GroqClient:
                     prompt_tokens=prompt_tokens)
 
     def _call(self, fn: Callable[[], T], prompt_tokens: int | None = None,
-              passthrough: tuple[type[Exception], ...] = ()) -> T:
+              passthrough: tuple[type[Exception], ...] = (), retry: bool = True) -> T:
         """Run one SDK call with the error mapping, the single timeout retry and the single rate-limit retry.
-        Exceptions in `passthrough` reach the caller unchanged."""
+        Exceptions in `passthrough` reach the caller unchanged. `retry=False` skips both waits (health checks)."""
         import groq
 
-        timeouts = waits = 0
+        timeouts = waits = 0 if retry else 1
         while True:
             try:
                 return fn()
@@ -262,7 +263,7 @@ class GroqClient:
                 if timeouts == 1:
                     self.sleep(self.backoff)
                     continue
-                raise LLMError("Groq timed out twice. Try again in a moment.") from e
+                raise LLMError("Groq timed out twice. Try again in a moment." if retry else "Groq timed out.") from e
             except groq.AuthenticationError as e:
                 raise LLMError("GROQ_API_KEY was rejected by Groq.") from e
             except groq.NotFoundError as e:
@@ -321,18 +322,23 @@ class GroqClient:
     def embed(self, texts: list[str]) -> list[list[float]]:
         raise LLMError("Groq has no embedding API; embeddings come from EMBED_PROVIDER (pinecone or ollama).")
 
-    def list_models(self) -> list[str]:
-        """Model ids this key can use. Listing models costs no tokens."""
-        return sorted(m.id for m in self._call(lambda: self.client.models.list()).data)
+    def list_models(self, *, quick: bool = False) -> list[str]:
+        """Model ids this key can use. Listing models costs no tokens.
+        `quick`: a short timeout and no retries or rate-limit waits, for health checks."""
+        client = self.client
+        if quick and hasattr(client, "with_options"):
+            client = client.with_options(timeout=self.HEALTH_TIMEOUT)
+        return sorted(m.id for m in self._call(lambda: client.models.list(), retry=not quick).data)
 
     def health(self) -> dict[str, Any]:
-        """Check the key and model with a models-list call (cached for a minute)."""
+        """Check the key and model with a quick models-list call (cached for a minute).
+        Never waits or retries: Render's health check and the page's status pill are waiting on it."""
         now = time.monotonic()
         if self._health and now - self._health[0] < self.HEALTH_TTL:
             return self._health[1]
         issues: list[str] = []
         try:
-            models = self.list_models()
+            models = self.list_models(quick=True)
             if not self.model:
                 issues.append("GROQ_MODEL is not set. Pick one with: python -m app.list_models")
             elif self.model not in models:

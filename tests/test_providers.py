@@ -233,6 +233,30 @@ def test_groq_health_uses_model_list_and_caches():
     assert sdk.models_calls == 2 and sdk.calls == []  # no tokens spent, second check cached
 
 
+class FailingModelsSDK(FakeGroqSDK):
+    """models.list() raises `error` every time."""
+
+    def __init__(self, error: Exception):
+        super().__init__()
+        self.error = error
+
+    def _list(self):
+        self.models_calls += 1
+        raise self.error
+
+
+@pytest.mark.parametrize("error, ok", [
+    (groq_429("TPM", "7.5s"), True),  # busy minute: the key works, so health is ok
+    (groq.APITimeoutError(request=REQ), False),
+])
+def test_groq_health_never_waits_or_retries(error, ok):
+    """Render's health check and the page's status pill wait on /api/health: it must answer at once."""
+    sdk, sleeps = FailingModelsSDK(error), Sleeps()
+    c = GroqClient("key", "qwen-test", client=sdk, sleep=sleeps)
+    assert c.health()["ok"] is ok
+    assert sleeps == [] and sdk.models_calls == 1
+
+
 def test_groq_stream():
     chunks = [SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=t))]) for t in ("Yes", " [1].")]
     assert "".join(groq_client(FakeGroqSDK(iter(chunks))).stream([{"role": "user", "content": "q"}])) == "Yes [1]."
