@@ -55,7 +55,19 @@ Step "Check the project setup" {
 
 Step "Activate the virtual environment" { . .\.venv\Scripts\Activate.ps1 }
 
-$branch = (git rev-parse --abbrev-ref HEAD).Trim()
+# Work on the repository's default branch: it is the one Render deploys, so the README numbers and
+# your rates.yaml edits must land there. Local edits (e.g. to data/rates.yaml) come along when switching.
+$script:branch = ""
+Step "Find the deployed (default) branch" {
+    $head = git remote show origin | Select-String "HEAD branch:"
+    if (-not $head) { throw "Could not ask GitHub for the default branch. Check your internet connection." }
+    $script:branch = $head.ToString().Split(":")[1].Trim()
+}
+$current = (git rev-parse --abbrev-ref HEAD).Trim()
+if ($current -ne $branch) {
+    Step "Switch from $current to $branch" { git fetch origin; if ($LASTEXITCODE -eq 0) { git checkout $branch } } `
+        "Commit or stash your local changes (git stash), then run again."
+}
 Step "Pull the latest code ($branch)" { git pull origin $branch } `
     "If git reports a conflict or local changes, commit or stash them (git stash) and run again."
 

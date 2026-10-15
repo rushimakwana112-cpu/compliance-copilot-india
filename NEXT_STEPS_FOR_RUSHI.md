@@ -8,7 +8,7 @@ In PowerShell, in the project folder:
 ```powershell
 .\scripts\run_all.ps1
 ```
-Expected: a green `OK:` line after each step and `All done.` at the end. It pulls, installs, runs the tests (`243 passed`), re-indexes Pinecone, runs the eval, writes the numbers into the README table, commits and pushes.
+Expected: a green `OK:` line after each step and `All done.` at the end. It switches to the deployed (default) branch, pulls, installs, runs the tests (`243 passed`), re-indexes Pinecone, runs the eval, writes the numbers into the README table, commits and pushes.
 If it stops, the red `STOPPED at:` line names the step and what to check. If Windows says scripts are disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once and try again.
 
 ## 2. Check the null and flagged rates in `data/rates.yaml`

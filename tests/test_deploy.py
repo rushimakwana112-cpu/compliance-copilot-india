@@ -119,7 +119,7 @@ def test_readme_update_refuses_an_empty_report():
 def test_run_all_script_covers_every_step():
     ps1 = (ROOT / "scripts" / "run_all.ps1").read_text(encoding="utf-8")
     assert ps1.isascii()  # Windows PowerShell 5.1 misreads UTF-8 without a BOM
-    order = [".venv\\Scripts\\Activate.ps1", "git pull", "pip install", "pytest", "ingest.run --reindex",
+    order = [".venv\\Scripts\\Activate.ps1", "HEAD branch:", "git checkout", "git pull", "pip install", "pytest", "ingest.run --reindex",
              "eval.run", "scripts.update_readme_eval", "git commit", "git push"]
     body = ps1.split('$ErrorActionPreference = "Stop"')[1]  # the code, not the help text at the top
     positions = [body.index(step) for step in order]
