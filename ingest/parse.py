@@ -11,6 +11,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from ingest.cleanup import fix_split_words
+
 log = logging.getLogger("ingest")
 MIN_CHARS = 40  # fewer characters than this on a page means "probably scanned"
 
@@ -44,7 +46,7 @@ def parse_pdf(path: Path) -> list[Page]:
     pages: list[Page] = []
     warned = False
     for i, page in enumerate(PdfReader(str(path)).pages, start=1):
-        text = (page.extract_text() or "").strip()
+        text = fix_split_words((page.extract_text() or "").strip())
         if len(text) >= MIN_CHARS:
             pages.append(Page(i, text))
             continue
@@ -56,7 +58,7 @@ def parse_pdf(path: Path) -> list[Page]:
             continue
         log.warning("%s p.%d had no text layer; used OCR", path.name, i)
         if ocr_text.strip():
-            pages.append(Page(i, ocr_text.strip(), ocr=True))
+            pages.append(Page(i, fix_split_words(ocr_text.strip()), ocr=True))
     return pages
 
 

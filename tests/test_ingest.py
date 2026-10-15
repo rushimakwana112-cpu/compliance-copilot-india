@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from app import catalog
 from ingest.chunk import MAX_CHARS, OVERLAP, chunk_pages, split_text
+from ingest.cleanup import fix_split_words
 from ingest.index import vector_id
 from ingest.parse import Page, parse_html, parse_pdf
 from ingest.run import ingest_file
@@ -164,3 +167,26 @@ def test_reindex_includes_uploaded_pdfs(act_pdf, store, tmp_path, monkeypatch):
     rows = run_mod.uploaded_rows([])
     assert [r["doc"] for r in rows] == ["ESIC circular"] and rows[0]["scope"] == "gujarat"
     assert run_mod.uploaded_rows([{"doc": "ESIC circular"}]) == []  # listed in sources.csv: handled there
+
+
+@pytest.mark.parametrize("raw, fixed", [
+    ("53. Payment of gra tuity.—(1) Gra tuity shall be pay able", "53. Payment of gratuity.—(1) Gratuity shall be payable"),
+    ("CHAPTER V\nG R A T U I T Y", "CHAPTER V\nGRATUITY"),
+    ("benefits to the em ploy ees of the estab lish ment", "benefits to the employees of the establishment"),
+    ("any one of the workers", "any one of the workers"),  # real words that don't form a legal word stay apart
+    ("I A M a sentence, not a heading", "I A M a sentence, not a heading"),
+])
+def test_split_words_are_repaired(raw, fixed):
+    assert fix_split_words(raw) == fixed
+
+
+def test_parse_pdf_repairs_split_words(tmp_path):
+    from reportlab.pdfgen import canvas
+
+    path = tmp_path / "split.pdf"
+    c = canvas.Canvas(str(path))
+    c.drawString(72, 750, "CHAPTER V  G R A T U I T Y")
+    c.drawString(72, 730, "53. Payment of gra tuity.—Gra tuity shall be payable to every em ployee.")
+    c.save()
+    text = parse_pdf(path)[0].text
+    assert "gratuity" in text and "GRATUITY" in text and "employee" in text and "gra tuity" not in text
