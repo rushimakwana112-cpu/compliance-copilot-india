@@ -284,3 +284,23 @@ def test_definition_chunk_is_sent_even_below_threshold(services, store, llm):
 
 def test_coverage_question_is_not_a_term(services):
     assert rag.Signals.of("Who is covered for gratuity under the SS Code?").term == ""
+
+
+def test_coverage_question_also_gets_the_applicability_section(services, store, llm):
+    for i in range(8):  # gratuity chunks that crowd the top results
+        store.add(f"who is covered for gratuity under the SS code: an employee with continuous service, case {i}",
+                  doc="Code on Social Security, 2020", section="Section 53 · Payment of gratuity", page=40 + i,
+                  chapter="Chapter V — Gratuity", scope="central", status="current", doc_type="act")
+    store.add("1. Short title, extent, commencement and application.—(4) The provisions of Chapter V on gratuity "
+              "shall apply to every factory, mine, plantation, shop or establishment with the notified number of "
+              "employees", doc="Code on Social Security, 2020", section="Section 1 · Short title, extent, commencement "
+              "and application", page=1, chapter="Chapter I — Preliminary", scope="central", status="current", doc_type="act")
+    services.settings.keep_k = 3
+    llm.responder = lambda m, j: "Employees with continuous service [1]; it applies to factories and establishments [2]."
+    question = "Who is covered for gratuity under the SS Code?"
+    assert rag.coverage_topic(question) == "gratuity" and rag.coverage_topic("What is gratuity?") == ""
+    resp, passages = rag.answer(services, question, Scope(["gujarat"], "default"))
+    applicability = [p for p in passages if p.section.startswith("Section 1 ")]
+    assert applicability and applicability[0].pinned
+    system, user = llm.calls[-1][0]["content"], llm.calls[-1][1]["content"]
+    assert "which establishments the provisions apply to" in system and "every factory, mine" in user

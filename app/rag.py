@@ -376,11 +376,61 @@ def retrieve(services: Services, question: str, scope: Scope, trace: Trace | Non
         for p in ranked[:per_state_keep]:
             kept.setdefault((p.doc, p.page, p.text[:80]), p)
     pinned = _definition_passages(services, question, scope, statuses, signals, trace)
+    pinned += [p for p in _applicability_passages(services, question, scope, statuses, signals, trace)
+               if (p.doc, p.page, p.text[:80]) not in {(q.doc, q.page, q.text[:80]) for q in pinned}]
     for p in pinned:
         kept.pop((p.doc, p.page, p.text[:80]), None)
     if not trace.matches:
         raise SearchError(f"Pinecone index '{trace.index}' returned 0 matches for filter {trace.filters}")
     return pinned + sorted(kept.values(), key=lambda p: p.rank_score, reverse=True)
+
+
+# "Who is covered for gratuity?" needs two things: which employees qualify (usually in the chapter itself)
+# and which establishments the chapter applies to (often in Section 1 or a Schedule, far from the chapter).
+COVERAGE_QUESTION = re.compile(
+    r"\b(?:who (?:is|are) (?:covered|eligible|entitled)|covered (?:under|by)|coverage|applicab\w*|"
+    r"appl(?:y|ies) to|eligib\w*|entitled to)\b", re.IGNORECASE)
+COVERAGE_TOPICS: dict[str, tuple[str, str]] = {  # name → (question pattern, text pattern)
+    "gratuity": (r"\bgratuity\b", r"gratuity"),
+    "bonus": (r"\bbonus\b", r"bonus"),
+    "employees' state insurance": (r"\besic?\b|state insurance", r"state insurance|\besic?\b"),
+    "provident fund": (r"\bp\.?f\b|\bepf\b|provident fund", r"provident fund"),
+    "maternity benefit": (r"\bmaternity\b", r"maternity"),
+}
+APPLIES = re.compile(r"\bappl(?:y|ies|ied|ication|icable|icability)\b", re.IGNORECASE)
+ESTABLISHMENT = re.compile(r"\b(?:establishments?|factor(?:y|ies)|mines?|shops?|plantations?)\b", re.IGNORECASE)
+
+
+def coverage_topic(question: str) -> str:
+    """'gratuity' for 'Who is covered for gratuity under the SS Code?', else ''."""
+    if not COVERAGE_QUESTION.search(question):
+        return ""
+    return next((name for name, (q, _) in COVERAGE_TOPICS.items() if re.search(q, question, re.IGNORECASE)), "")
+
+
+def _applicability_passages(services: Services, question: str, scope: Scope, statuses: tuple[str, ...],
+                            signals: Signals, trace: Trace) -> list[Passage]:
+    """For a coverage question, the passages that say which establishments the topic's chapter applies to."""
+    topic = coverage_topic(question)
+    if not topic:
+        return []
+    text_pat = COVERAGE_TOPICS[topic][1]
+    flt = scope_filter(scope.states, statuses)
+    query = f"establishments to which the {topic} chapter applies; application of the provisions on {topic}"
+    try:
+        matches = services.store.search(query, services.settings.top_k, flt)  # type: ignore[union-attr]
+    except Exception as e:  # noqa: BLE001 — the main search already worked
+        log.warning("Applicability lookup failed for %s: %s", topic, e)
+        return []
+    out = []
+    for m in matches:
+        p = _passage(m.metadata, m.score, signals)
+        where = f"{p.chapter} {p.heading} {p.section} {p.text}"
+        if re.search(text_pat, where, re.IGNORECASE) and APPLIES.search(where) and ESTABLISHMENT.search(p.text):
+            trace.add(m.id, m.score, m.metadata)
+            p.pinned = True
+            out.append(p)
+    return out[:2]
 
 
 def _definition_passages(services: Services, question: str, scope: Scope, statuses: tuple[str, ...],
@@ -418,6 +468,10 @@ Answer ONLY from the numbered passages. Rules:
 6. If the passages do not answer the question, reply with exactly: NOT_FOUND
 You may use **bold**, short bullet lists and markdown tables. No headings."""
 
+COVERAGE_RULE = """The question asks who is covered. If the passages contain them, state both:
+(a) which employees are eligible, and (b) which establishments the provisions apply to (for example a minimum
+number of employees), each with its citation. If one of the two is not in the passages, say so."""
+
 COMPARE_RULE = """The question compares states. Answer with a markdown table that has one row per state
 ({states}) and cite passages in the cells. If a state's passages don't cover it, write "not in documents" in its row.
 Then add one summary sentence."""
@@ -433,6 +487,8 @@ def build_messages(question: str, passages: list[Passage], scope: Scope) -> list
                                       "REPEALED" if p.status != "current" else "") if x)
         blocks.append(f"[{i}] {head}\n{p.context or p.text}")
     system = SYSTEM_PROMPT + f"\nJurisdiction searched: {scope.label()}."
+    if coverage_topic(question):
+        system += "\n" + COVERAGE_RULE
     if len(scope.states) > 1:
         system += "\n" + COMPARE_RULE.format(states=", ".join(scope.label().split(" + ")[1:]))
     user = "Passages:\n\n" + "\n\n".join(blocks) + f"\n\nQuestion: {question}"
