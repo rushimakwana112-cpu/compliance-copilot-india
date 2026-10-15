@@ -242,7 +242,7 @@ python -m eval.run --sweep 0.34,0.38,0.42,0.47
 | not_found recall | 100% |
 | median latency | 1.9 s |
 
-Note: measured on 26 questions, 7 skipped because their documents aren't indexed yet; small sample, so treat as indicative. I'll update after re-running.
+Note: measured on 26 questions, 7 skipped (7 because their documents aren't indexed yet); small sample, so treat as indicative. Updated by scripts/run_all.ps1.
 <!-- eval-results:end -->
 
 **Why the Pinecone threshold is only 0.38.** With `llama-text-embed-v2`, similarity scores for relevant and irrelevant questions overlap. In real tests, *"What is a fixed term employee?"* scored 0.43 although the Code defines the term, while *"Gratuity rule in Dubai?"* scored above 0.47 and was refused correctly by the model. No single threshold separates those, so the threshold now only blocks clear nonsense and the real guards are elsewhere: questions about foreign places are refused before retrieval, a chunk that defines the question's term is always sent to the model, and the model must answer exactly NOT_FOUND when the passages don't answer the question.
