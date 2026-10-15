@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app import rag
 from app.jurisdiction import Scope
 from app.schemas import Turn
@@ -76,6 +78,30 @@ def test_followup_rewrite(llm):
     history = [Turn(role="user", content="PT for 15000 salary in Pune"), Turn(role="assistant", content="...")]
     assert "Gujarat" in rag.rewrite_followup(llm, "and for Gujarat?", history)
     assert rag.rewrite_followup(llm, "and for Gujarat?", []) == "and for Gujarat?"  # no history, no rewrite
+
+
+HISTORY = [Turn(role="user", content="Who is covered for gratuity under the Code on Social Security?"),
+           Turn(role="assistant", content="Employees with five years of continuous service [1].")]
+
+
+@pytest.mark.parametrize("message", [
+    "and for Gujarat?", "What about Kerala?", "Same for fixed-term staff?", "Is it taxable?",
+    "does that apply there?", "in Pune?",
+])
+def test_clear_followups_are_rewritten(llm, message):
+    llm.responder = lambda m, j: "Is gratuity under the Code on Social Security taxable in Gujarat?"
+    assert rag.needs_rewrite(message, HISTORY)
+    assert rag.rewrite_followup(llm, message, HISTORY) != message and len(llm.calls) == 1
+
+
+@pytest.mark.parametrize("message", [
+    "Gratuity rule in Dubai?", "What is the PF rate?", "Is ESIC applicable on 24000 gross?",
+    "Bonus for contract workers in Surat", "Is this gratuity rule valid for contract staff?",
+])
+def test_standalone_questions_are_used_as_is(llm, message):
+    llm.responder = lambda m, j: "Who is covered for gratuity under the Code on Social Security in Dubai?"
+    assert not rag.needs_rewrite(message, HISTORY)
+    assert rag.rewrite_followup(llm, message, HISTORY) == message and llm.calls == []
 
 
 def test_comparison_retrieves_each_state_and_asks_for_table(services, store, llm):

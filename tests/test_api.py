@@ -76,9 +76,26 @@ def test_chat_rag_contract(services, store, llm):
     assert isinstance(body["latency_ms"], int)
 
 
-def test_chat_not_found_contract(client):
+def test_chat_not_found_contract(client, store):
+    store.add("Monthly professional tax slab table", doc="Gujarat PT schedule", page=1, scope="gujarat",
+              status="current", doc_type="notification")
     body = client.post("/api/chat", json={"message": "Gratuity rule in Dubai?"}).json()
     assert body["type"] == "not_found" and body["citations"] == []
+
+
+def test_chat_search_failure_is_an_error_not_a_silent_not_found(client, store, caplog):
+    # Empty index: 0 matches means a wrong index or filter, so it must not look like "not in my documents".
+    body = client.post("/api/chat", json={"message": "Gratuity rule in Dubai?"}).json()
+    assert body["type"] == "error" and body["answer"].startswith("Search failed: ")
+    assert "0 matches" in body["answer"]
+    assert any(r.levelname == "WARNING" and "Search failed" in r.getMessage() for r in caplog.records)
+
+    def boom(*a, **k):
+        raise ConnectionError("pinecone unreachable")
+
+    store.search = boom
+    body = client.post("/api/chat/stream", json={"message": "Gratuity rule in Kerala?"}).text
+    assert '"type": "error"' in body and "Search failed: ConnectionError: pinecone unreachable" in body
 
 
 def test_chat_stream_events(services, store, llm):

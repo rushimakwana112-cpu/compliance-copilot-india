@@ -205,13 +205,15 @@ then run `python -m ingest.run --only "ESIC"`. Files are downloaded once into `d
 | `GET /healthz` | `{ok: true}` with no outside calls, for Render's health check |
 | `GET /api/documents` | `[{name, scope, status, meta}]`: indexed, indexing and planned documents |
 | `GET /api/states` | `[{id, name, aliases[]}]` |
-| `POST /api/chat` | `{message (≤ 1,000 chars), history[] (last 4 turns used), jurisdiction}` → `{type: rag\|tool\|sql\|not_found, answer, scope, citations[], table?, tool?, sql?, rows_scanned?, note?, latency_ms, cached?, quota_exceeded?}`. In public mode, 429 with the same shape when the IP is over its limit |
+| `POST /api/chat` | `{message (≤ 1,000 chars), history[] (last 4 turns used), jurisdiction}` → `{type: rag\|tool\|sql\|not_found\|error, answer, scope, citations[], table?, tool?, sql?, rows_scanned?, note?, latency_ms, cached?, quota_exceeded?}`. In public mode, 429 with the same shape when the IP is over its limit |
 | `POST /api/chat/stream` | Server-Sent Events: `meta`, then `token`…, then `done` with the same JSON as `/api/chat` |
 | `POST /api/ingest/file` | multipart `file` (PDF ≤ 20 MB) + `scope`; indexes in the background. 403 in public mode |
 | `POST /api/ingest/url` | `{url (https), scope}`; downloads and indexes in the background. 403 in public mode |
 | `POST /api/feedback` | appends to `logs/feedback.jsonl` (thumbs-down questions are eval candidates) |
 
-Every chat is logged to `logs/chats.jsonl` with the scope, route, top scores and latency.
+Every chat is logged to `logs/chats.jsonl` with the scope, route, outcome and latency, plus the retrieval details for every route: the Pinecone index, the filters used, the top 5 scores and the doc and section of each retrieved chunk (empty, with `"retrieval": "not run"`, for calculator and SQL answers). `type: error` means the search itself failed (Pinecone unreachable, not configured, or 0 matches, which points to a wrong index or filter); it is logged as a WARNING and shown as *"Search failed: …"* instead of a silent *not found*.
+
+Follow-ups are rewritten into a standalone question only when they clearly are one: they start with *and*, *what about*, *same for* and similar, or lean on *it/that/this/there* without naming their own topic. *"Gratuity rule in Dubai?"* is used exactly as typed.
 
 ## Evaluation
 

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -19,6 +20,8 @@ from app.router import route
 from app.schemas import ChatRequest, ChatResponse, ScopeOut
 from app.services import Services
 
+log = logging.getLogger("app")
+
 
 @dataclass
 class Turn:
@@ -28,7 +31,7 @@ class Turn:
     question: str  # standalone version of the message
     scope: Scope
     route: str
-    top_scores: list[float] = field(default_factory=list)
+    trace: rag.Trace = field(default_factory=rag.Trace)  # retrieval details for the log
 
 
 def plan(services: Services, req: ChatRequest) -> Turn:
@@ -40,7 +43,7 @@ def plan(services: Services, req: ChatRequest) -> Turn:
     if scope.how == "default" and question != req.message and detect_states(question):
         # "and the PT there?" → the rewritten question carries the state from earlier turns
         scope = resolve(question, j.mode, j.state)
-    return Turn(req.message, question, scope, route(question, s.router, services.llm))
+    return Turn(req.message, question, scope, route(question, s.router, services.llm), rag.Trace(index=s.pinecone_index))
 
 
 def _scope_out(scope: Scope) -> ScopeOut:
@@ -53,8 +56,7 @@ def _answer(services: Services, turn: Turn) -> ChatResponse:
     elif turn.route == "sql":
         resp = sql_agent.run(services, turn.question)
     else:
-        resp, passages = rag.answer(services, turn.question, turn.scope)
-        turn.top_scores = [round(p.score, 3) for p in passages[:4]]
+        resp, _ = rag.answer(services, turn.question, turn.scope, turn.trace)
     resp.scope = resp.scope or _scope_out(turn.scope)
     return resp
 
@@ -66,11 +68,17 @@ def _llm_down(turn: Turn, err: Exception) -> ChatResponse:
                         scope=_scope_out(turn.scope), note="Check /api/health.")
 
 
+def _search_failed(turn: Turn, err: rag.SearchError) -> ChatResponse:
+    log.warning("Search failed for %r on index %s: %s", turn.question, turn.trace.index, err)
+    return ChatResponse(type="error", answer=f"Search failed: {err}", scope=_scope_out(turn.scope))
+
+
 def _log(turn: Turn, resp: ChatResponse) -> None:
+    """One line per chat, for every route and outcome. Retrieval fields are empty when no search ran."""
     logs.append("chats", {
         "question": turn.message, "standalone": turn.question if turn.question != turn.message else None,
         "scope": turn.scope.states, "how": turn.scope.how, "route": turn.route, "type": resp.type,
-        "top_scores": turn.top_scores, "latency_ms": resp.latency_ms, "cached": resp.cached,
+        **turn.trace.log_fields(), "latency_ms": resp.latency_ms, "cached": resp.cached,
     })
 
 
@@ -92,6 +100,8 @@ def handle(services: Services, req: ChatRequest, *, log: bool = True, use_cache:
         return hit, turn
     try:
         resp = _answer(services, turn)
+    except rag.SearchError as e:
+        resp = _search_failed(turn, e)
     except LLMError as e:
         resp = _llm_down(turn, e)
     resp.latency_ms = int((time.perf_counter() - t0) * 1000)
@@ -122,15 +132,16 @@ def handle_stream(services: Services, req: ChatRequest) -> Iterator[tuple[str, d
     try:
         if turn.route == "rag":
             resp = rag.not_found(turn.scope)
-            for kind, value in rag.stream(services, turn.question, turn.scope):
+            for kind, value in rag.stream(services, turn.question, turn.scope, turn.trace):
                 if kind == "token":
                     yield "token", {"t": value}
                 else:
                     resp = value  # type: ignore[assignment]
             resp.scope = resp.scope or _scope_out(turn.scope)
-            turn.top_scores = [c.score for c in resp.citations[:4] if c.score is not None]
         else:
             resp = _answer(services, turn)
+    except rag.SearchError as e:
+        resp = _search_failed(turn, e)
     except LLMError as e:
         resp = _llm_down(turn, e)
     resp.latency_ms = int((time.perf_counter() - t0) * 1000)

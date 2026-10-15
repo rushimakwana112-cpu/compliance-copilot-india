@@ -778,7 +778,8 @@ const BADGE = {
   rag: '<span class="badge rag">From documents</span>',
   tool: '<span class="badge tool">Calculator</span>',
   sql: '<span class="badge sql">SQL query</span>',
-  not_found: '<span class="badge nf">Not in my documents</span>'
+  not_found: '<span class="badge nf">Not in my documents</span>',
+  error: '<span class="badge nf">Search failed</span>'
 };
 function metaRow(a) {
   const extra = a.type === "tool" && a.tool ? `<span class="mono">${esc(a.tool)}</span>`
@@ -792,7 +793,7 @@ function addBot(a) {
   const id = "a" + Date.now() + Math.random().toString(16).slice(2, 6);
   ui.answers[id] = a;
   const el = document.createElement("article");
-  el.className = "msg bot" + (a.type === "not_found" ? " notfound" : "");
+  el.className = "msg bot" + (a.type === "not_found" || a.type === "error" ? " notfound" : "");
   el.dataset.id = id;
   const nC = (a.citations || []).length;
   let html = metaRow(a) + `<div class="answer">${renderMarkdown(a.answer, nC)}</div>`;
@@ -849,7 +850,8 @@ function selectAnswer(id, highlight) {
     .forEach((b) => b.setAttribute("aria-pressed", Number(b.dataset.i) === highlight));
   const list = $("srcList");
   if (!a || !a.citations || !a.citations.length) {
-    $("srcFor").textContent = a && a.type === "not_found" ? "No passage scored above the threshold." : "This answer did not use document passages.";
+    $("srcFor").textContent = a && a.type === "not_found" ? "No passage scored above the threshold."
+      : a && a.type === "error" ? "The document search failed, so nothing was retrieved." : "This answer did not use document passages.";
     list.innerHTML = `<div class="src-empty">${a && a.type === "not_found" ? "Nothing relevant was found, so the copilot refused to guess." : "No sources for this answer."}</div>`;
     return;
   }
