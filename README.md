@@ -6,6 +6,8 @@ A portfolio project by **Cyber Panther**, built as a Learnbay assignment. It run
 
 > For reference only, not legal advice. Figures come only from the cited documents and from `data/rates.yaml`, which you fill in from official circulars.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/rushimakwana112-cpu/compliance-copilot-india)
+
 | Light "Heroic" theme (default) | Dark "Cyber Panther" theme |
 |---|---|
 | ![Hero, light](docs/screenshots/hero-light.png) | ![Hero, dark](docs/screenshots/hero-dark.png) |
@@ -114,6 +116,10 @@ Run the tests (no Groq, Ollama or Pinecone needed; all are faked): `pip install 
 
 ## Deploy free on Render
 
+**One click:** [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/rushimakwana112-cpu/compliance-copilot-india)
+
+The button opens Render with this repository's `render.yaml` (the default branch). Sign in with GitHub, paste the 4 secrets (`GROQ_API_KEY`, `GROQ_MODEL`, `PINECONE_API_KEY`, `PINECONE_INDEX`) and click **Apply**. The manual route is below.
+
 The server only answers questions; documents are indexed from your PC into Pinecone, and the deployed app reads the same index. `render.yaml` describes the service, so Render sets most of it up for you.
 
 ```powershell
@@ -147,7 +153,7 @@ try { Invoke-RestMethod "$url/api/ingest/url" -Method Post -ContentType "applica
 - Each IP may ask 10 questions a minute and 60 a day; over that, the answer explains the limit (HTTP 429 with `Retry-After`).
 - The last 500 answers are cached by question and jurisdiction, so repeated questions cost no Groq tokens.
 - Messages are limited to 1,000 characters and history to the last 4 turns.
-- When Groq's own free quota runs out, the answer is *"Daily demo limit reached. Please try again later."*
+- When Groq's own free limits are hit, the answer is *"Busy right now, please retry in a minute"* (per-minute limit) or *"Daily demo limit reached. Please try again later."* (daily limit).
 - Keys stay on the server: `/api/health` reports the provider and model, never a key.
 
 ## Environment variables
