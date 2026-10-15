@@ -164,6 +164,7 @@ try { Invoke-RestMethod "$url/api/ingest/url" -Method Post -ContentType "applica
 | `PINECONE_API_KEY` | | Your Pinecone key. Secret |
 | `PINECONE_INDEX` | `compliance-copilot-cloud` | Index name; created if missing, never modified if it exists |
 | `SCORE_THRESHOLD` | `0.38` (pinecone) / `0.55` (ollama) | Below this similarity the answer is "not found" without an LLM call. Leave unset to use the default for your embedding mode |
+| `CONTEXT_TOKEN_BUDGET` | `3000` | Estimated tokens of passages per answer (chars ÷ 4). Over it, neighbour context is trimmed, then the lowest-ranked passages are dropped. Keeps each request well under Groq's free ~8,000 tokens/minute |
 | `ROUTER` | `rules` | `rules` or `llm` (JSON routing with a rules fallback) |
 | `PUBLIC_MODE` | `false` | `true` on the deployed demo (see above) |
 | `RATE_LIMIT_PER_MIN` | `10` | Chats per IP per minute in public mode |
@@ -235,7 +236,7 @@ python -m eval.run --sweep 0.34,0.38,0.42,0.47
 
 **Re-tune after switching embedding models.** `llama-text-embed-v2` and `bge-m3` score on different scales, so a threshold that works for one can refuse too much, or too little, with the other. Run the sweep once per mode.
 
-**Tuning log** (fill in as you tune): which `SCORE_THRESHOLD` and chunk size you started with, what the sweep showed, and what you changed. Defaults: threshold 0.38 for Pinecone embeddings and 0.55 for bge-m3; one chunk per defined term in Definitions sections (up to ~3,000 characters), other chunks up to ~1,800 characters with 200 overlap, cut only between sub-clauses; Schedules and end matter (Statement of Objects and Reasons, Notes on Clauses) get their own labels, and end matter is indexed as `commentary` and ranked 0.10 lower; top_k 12 → re-rank → keep 5, each with its neighbouring chunks. Answers list only the passages they cite; the rest appear under "Other passages searched".
+**Tuning log** (fill in as you tune): which `SCORE_THRESHOLD` and chunk size you started with, what the sweep showed, and what you changed. Defaults: threshold 0.38 for Pinecone embeddings and 0.55 for bge-m3; one chunk per defined term in Definitions sections (up to ~3,000 characters), other chunks up to ~1,800 characters with 200 overlap, cut only between sub-clauses; Schedules and end matter (Statement of Objects and Reasons, Notes on Clauses) get their own labels, and end matter is indexed as `commentary` and ranked 0.10 lower; top_k 12 → re-rank → keep 5, each with up to 600 characters of its neighbouring chunks on each side, capped at ~3,000 prompt tokens. Answers list only the passages they cite; the rest appear under "Other passages searched".
 
 ## Limitations
 

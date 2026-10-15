@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.jurisdiction import Scope
-from app.llm import LLM, LLMError
+from app.llm import LLM, LLMError, estimate_tokens
 from app.schemas import Citation, ChatResponse, ScopeOut, Turn
 from app.services import Services
 from app.vectorstore import scope_filter
@@ -29,7 +29,7 @@ COMMENTARY_PENALTY = 0.10  # end matter (Statement of Objects and Reasons…) ra
 SEARCHED = ("current", "commentary")  # statuses searched by default; repealed laws only when asked
 OLD = {"repealed", "historical"}
 SNIPPET_CHARS = 320
-NEIGHBOUR_CHARS = 900  # how much of the previous / next chunk is added around each passage
+NEIGHBOUR_CHARS = 600  # at most this much of the previous / next chunk, the part touching the passage
 NOT_FOUND = "NOT_FOUND"
 log = logging.getLogger("app")
 
@@ -497,15 +497,45 @@ def status_mark(status: str) -> str:
     return "COMMENTARY (not operative law)" if status == "commentary" else ""
 
 
+def passage_block(i: int, p: Passage) -> str:
+    """One numbered passage as the model sees it: a header line, then the text with its neighbours."""
+    head = " · ".join(x for x in (p.doc, p.section, f"p. {p.page}" if p.page else "",
+                                  f"effective {p.effective_date}" if p.effective_date else "",
+                                  "Central" if p.scope == "central" else p.scope.title(),
+                                  status_mark(p.status)) if x)
+    return f"[{i}] {head}\n{p.context or p.text}"
+
+
+def context_tokens(passages: list[Passage]) -> int:
+    return estimate_tokens("\n\n".join(passage_block(i, p) for i, p in enumerate(passages, 1)))
+
+
+def fit_budget(passages: list[Passage], budget: int) -> int:
+    """Shrink the passages to about `budget` tokens, in place. Returns how many passages were dropped.
+
+    First the neighbour context is removed, lowest-ranked passage first; then the lowest-ranked
+    passages are dropped. Pinned passages (the definition or applicability the question needs) and
+    the best passage are always kept.
+    """
+    if budget <= 0:
+        return 0
+    for p in reversed(passages):
+        if context_tokens(passages) <= budget:
+            return 0
+        p.context = ""
+    dropped = 0
+    while context_tokens(passages) > budget and len(passages) > 1:
+        victim = next((i for i in range(len(passages) - 1, 0, -1) if not passages[i].pinned), None)
+        if victim is None:
+            break
+        passages.pop(victim)
+        dropped += 1
+    return dropped
+
+
 def build_messages(question: str, passages: list[Passage], scope: Scope) -> list[dict[str, str]]:
     """System prompt + numbered passages. Passage order = citation numbers."""
-    blocks = []
-    for i, p in enumerate(passages, 1):
-        head = " · ".join(x for x in (p.doc, p.section, f"p. {p.page}" if p.page else "",
-                                      f"effective {p.effective_date}" if p.effective_date else "",
-                                      "Central" if p.scope == "central" else p.scope.title(),
-                                      status_mark(p.status)) if x)
-        blocks.append(f"[{i}] {head}\n{p.context or p.text}")
+    blocks = [passage_block(i, p) for i, p in enumerate(passages, 1)]
     system = SYSTEM_PROMPT + f"\nJurisdiction searched: {scope.label()}."
     if coverage_topic(question):
         system += "\n" + COVERAGE_RULE
@@ -608,6 +638,9 @@ def prepare(services: Services, question: str, scope: Scope,
     if not pinned and (best is None or best < services.settings.score_threshold):
         return passages, not_found(scope, best)
     expand_neighbours(services, question, passages)
+    dropped = fit_budget(passages, services.settings.context_token_budget)
+    if trace is not None:
+        trace.dropped = dropped
     return passages, None
 
 
@@ -617,7 +650,10 @@ def answer(services: Services, question: str, scope: Scope,
     passages, early = prepare(services, question, scope, trace)
     if early:
         return early, passages
-    raw = services.llm.chat(build_messages(question, passages, scope))
+    messages = build_messages(question, passages, scope)
+    if trace is not None:
+        trace.prompt_tokens = estimate_tokens(messages)
+    raw = services.llm.chat(messages)
     return finish(raw, passages, scope), passages
 
 
@@ -631,8 +667,11 @@ def stream(services: Services, question: str, scope: Scope, trace: Trace | None 
     if early:
         yield "done", early
         return
+    messages = build_messages(question, passages, scope)
+    if trace is not None:
+        trace.prompt_tokens = estimate_tokens(messages)
     raw, released = "", False
-    for token in services.llm.stream(build_messages(question, passages, scope)):
+    for token in services.llm.stream(messages):
         raw += token
         if not released:
             if len(raw.strip()) < len(NOT_FOUND) + 1:

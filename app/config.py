@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     # Retrieval knobs (tuned with the eval, see README): fetch 12, re-rank, send the best 5 to the model.
     top_k: int = 12
     keep_k: int = 5
+    # Groq's free tier allows ~8,000 tokens per minute, so each answer's passages are capped at this many
+    # (estimated) tokens: neighbour context is trimmed first, then the lowest-ranked passages are dropped.
+    context_token_budget: int = 3000
     history_turns: int = 4
 
     # Ingestion limits for uploads

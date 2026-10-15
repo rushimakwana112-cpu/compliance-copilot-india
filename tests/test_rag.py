@@ -162,6 +162,59 @@ def test_neighbour_expansion_merges_previous_and_next_chunk(services, store, llm
     assert cite.page == 42 and "thirty days" not in cite.snippet and "fixed term employee" in cite.snippet
 
 
+# ----------------------------------------------------------------- token budget
+def _long(word: str, n: int) -> str:
+    return " ".join(f"{word}{i}" for i in range(n))
+
+
+def seed_long(store, pinned_term: str = ""):
+    """Seven ~2,700-character chunks in a row of one section, so each has neighbours."""
+    for n in range(7):
+        store.add(f"gratuity fixed term employee {_long('w' + str(n) + 'x', 400)}", doc="SS Code",
+                  section="Section 53", page=40 + n, chunk_no=n, scope="central", status="current",
+                  doc_type="act", term=pinned_term if n == 6 else "")
+
+
+def test_neighbours_are_capped_at_600_chars_each_side(services, store, llm):
+    seed_long(store)
+    services.settings.context_token_budget = 0  # no budget: see the raw neighbour expansion
+    llm.responder = lambda m, j: "Yes [1]."
+    _, passages = rag.answer(services, "gratuity fixed term employee", Scope(["gujarat"], "default"))
+    p = next(p for p in passages if p.chunk_no not in (0, 6))
+    before, after = p.context.split(p.text)
+    assert len(before) <= 600 + 4 and len(after) <= 600 + 4 and before and after
+
+
+def test_budget_trims_neighbours_then_drops_lowest_ranked(services, store, llm):
+    seed_long(store)
+    llm.responder = lambda m, j: "Yes [1]."
+    trace = rag.Trace()
+    _, passages = rag.answer(services, "gratuity fixed term employee", Scope(["gujarat"], "default"), trace)
+    assert rag.context_tokens(passages) <= services.settings.context_token_budget
+    assert all(not p.context for p in passages)  # neighbours went first
+    assert trace.dropped >= 1 and len(passages) == services.settings.keep_k - trace.dropped
+    assert trace.prompt_tokens == rag.estimate_tokens(llm.calls[-1])
+    assert trace.prompt_tokens < services.settings.context_token_budget + 600  # + system prompt and question
+
+
+def test_budget_keeps_neighbours_when_they_fit(services, store, llm):
+    seed_sections(store)
+    services.settings.keep_k = 1
+    passages, _ = rag.prepare(services, "Gratuity is payable to a fixed term employee", Scope(["gujarat"], "default"))
+    assert passages[0].context and "within thirty days" in passages[0].context
+
+
+def test_budget_never_drops_pinned_or_best_passage():
+    def p(i, pinned=False):
+        return rag.Passage(doc=f"d{i}", section="s", page=1, score=0.5, rank_score=0.5, text=_long("t", 400),
+                           url="", status="current", effective_date="", doc_type="act", scope="central",
+                           context=_long("c", 600), pinned=pinned)
+
+    passages = [p(0, pinned=True), p(1, pinned=True), p(2), p(3), p(4)]
+    dropped = rag.fit_budget(passages, 900)
+    assert [x.doc for x in passages] == ["d0", "d1"] and dropped == 3  # still over: pinned ones stay
+
+
 def test_neighbour_lookup_failure_keeps_the_answer(services, store, llm):
     seed_sections(store)
     real = store.search
