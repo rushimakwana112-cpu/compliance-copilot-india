@@ -91,7 +91,7 @@
     - {doc: "Income-tax Act, 2025", section: "s.392(7), s.393(6)", url: "https://www.incometaxindia.gov.in/w/section-392-6"}
 
 - id: uan_epfo
-  patterns: ['\buan\b', '\b(?:pf|epf)\b.{0,25}\b(?:balance|passbook|transfer|withdraw\w*|claim|kyc)\b', '\b(?:check|know)\b.{0,20}\b(?:pf|epf) (?:balance|amount)\b', '\btransfer\b.{0,15}\b(?:pf|epf)\b']
+  patterns: ['\buan\b', '\b(?:pf|epf)\b.{0,25}\b(?:balance|passbook|transfer|withdraw\w*|claim|kyc)\b', '\b(?:check|know)\b.{0,20}\b(?:pf|epf) (?:balance|amount)\b', '\btransfer\b.{0,15}\b(?:pf|epf)\b', '\b(?:withdraw\w*|claim)\b.{0,15}\b(?:my )?(?:pf|epf|provident fund)\b']
   answer: |
     - **UAN** (Universal Account Number) is your 12-digit PF number for life; all your employers' PF accounts link to it. Your employer gives it to you, or find it on your payslip.
     - **Balance**: EPFO member passbook (passbook.epfindia.gov.in), the UMANG app, or SMS "EPFOHO UAN" to 7738299899.
@@ -140,8 +140,10 @@
     - {doc: "Income-tax Act, 2025", section: "s.392(1), (4), (5)", url: "https://www.incometaxindia.gov.in/w/section-392-6"}
 
 - id: deductions
-  patterns: ['\b(?:which|what) deductions\b', '\bdeductions?\b.{0,30}\bnew regime\b', '\b80 ?c\b(?!.{0,20}\d)|\b80 ?d\b(?!.{0,20}\d)|\b80ccd\b(?!.{0,20}\d)', '\bhome loan (?:interest )?(?:deduction|benefit)\b']
+  patterns: ['\b(?:which|what) deductions\b', '\bdeductions?\b.{0,30}\bnew regime\b', '\bstandard deduction\b(?!.{0,30}\d)', '\b80 ?c\b(?!.{0,20}\d)|\b80 ?d\b(?!.{0,20}\d)|\b80ccd\b(?!.{0,20}\d)', '\bhome loan (?:interest )?(?:deduction|benefit)\b']
   answer: |
+    Standard deduction on salary (s.19(1)): {inr:income_tax.standard_deduction_new} a year in the new regime, {inr:income_tax.standard_deduction_old} in the old regime. It is subtracted from your salary before tax; you don't need to invest or show proof.
+
     Old regime deductions (limits per year):
     - Section 123 (was 80C): PPF, ELSS, life insurance, your PF, home-loan principal, up to {inr:income_tax.deduction_s123}.
     - Section 126 (was 80D): health insurance, {inr:income_tax.deduction_s126_self} for self and family ({inr:income_tax.deduction_s126_self_senior} if senior), plus {inr:income_tax.deduction_s126_parents} for parents ({inr:income_tax.deduction_s126_parents_senior} if senior).

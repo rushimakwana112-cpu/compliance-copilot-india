@@ -104,3 +104,59 @@ def test_stream_hides_a_late_not_found(services, store, llm):
         text = c.post("/api/chat/stream", json={"message": "provident fund schemes funds officers"}).text
     done = text.rsplit("event: done", 1)[1]
     assert '"type": "not_found"' in done and "NOT_FOUND" not in done
+
+
+# ----------------------------------------------------------------- found by asking the live site 47 questions
+def test_ctc_reply_finishes_the_calculation_instead_of_the_pf_faq(services, llm):
+    """The reply to the CTC questions mentions PF, so the PF-rates FAQ used to answer it, and
+    "employer share is inside CTC" wasn't understood, so PF was asked again."""
+    from app.schemas import Turn
+
+    first, _ = ask(services, "My CTC is 6 lakh, what is my in-hand?")
+    reply = ("1. yearly 2. basic is 40% of CTC 3. PF on full basic, employer share is inside CTC "
+             "4. not sure about ESIC 5. Gujarat 6. new regime")
+    history = [Turn(role="user", content="My CTC is 6 lakh, what is my in-hand?"),
+               Turn(role="assistant", content=first.answer)]
+    resp, turn = handle(services, ChatRequest(message=reply, history=history), log=False, use_cache=False)
+    assert resp.tool == "ctc_in_hand" and resp.type == "tool" and llm.calls == []
+
+
+def test_a_first_ctc_question_without_an_amount_still_gets_the_explanation(services):
+    resp, _ = ask(services, "What is the difference between CTC and gross salary?")
+    assert resp.tool == "faq:ctc_gross_net"
+
+
+def test_overtime_with_a_monthly_salary_is_overtime_not_ctc(services):
+    resp, _ = ask(services, "overtime for 12 hours, monthly salary 26000")
+    assert resp.tool == "overtime" and "Overtime pay for 12 hours" in resp.answer
+
+
+@pytest.mark.parametrize("message, tool", [
+    ("how to withdraw pf", "faq:uan_epfo"),           # used to search the Code and quote a line about schemes
+    ("what is standard deduction", "faq:deductions"),  # used to say "not in my documents"
+])
+def test_common_questions_get_the_practical_answer(services, message, tool):
+    resp, _ = ask(services, message)
+    assert resp.tool == tool and "{" not in resp.answer
+
+
+def test_standard_deduction_answer_names_both_regimes(services):
+    from app import tools
+
+    resp, _ = ask(services, "what is standard deduction")
+    r = tools.load_rates()
+    for key in ("income_tax.standard_deduction_new", "income_tax.standard_deduction_old"):
+        assert tools.inr(tools.rate(r, key, None).value) in resp.answer
+
+
+def test_wrong_pf_figure_is_compared_with_the_employee_share(services):
+    """'PF on basic 18000 = 2500' was answered 'I get ₹4,410' (employee + employer total)."""
+    resp, _ = ask(services, "Is this correct? PF on basic 18000 = 2500")
+    first = resp.answer.split("\n")[0]
+    assert "The closest figure is Employee PF" in first and "(Total:" in first
+
+
+def test_missing_rate_answer_speaks_to_the_user(services):
+    resp, _ = ask(services, "professional tax in Mumbai for 20000 salary")
+    assert "(rate not configured)" in resp.answer and "rates.yaml" not in resp.answer
+    assert "HR/payroll" in resp.answer and "professional_tax.maharashtra" in resp.note

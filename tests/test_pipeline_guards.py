@@ -46,7 +46,7 @@ def test_check_my_calculation_matches_or_corrects(services):
     resp, turn = chat(services, "Is this calculation correct? 3 days unpaid leave on 26000 salary, 30 days method = 2600")
     assert turn.claim == 2600 and resp.answer.startswith("Your figure ₹2,600 matches")
     resp, _ = chat(services, "Is this correct? 3 days unpaid leave on 26000 salary, 30 days method, I got 3000")
-    assert resp.answer.startswith("Your figure ₹3,000 doesn't match: I get ₹2,600")
+    assert resp.answer.startswith("Your figure ₹3,000 doesn't match my calculation. The closest figure is Deduction: ₹2,600")
 
 
 def test_explanations_come_from_the_faq_with_rates_filled_in(services, llm):

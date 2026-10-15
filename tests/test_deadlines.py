@@ -70,12 +70,13 @@ def test_professional_tax_due_date_uses_the_state(rates):
     resp = tools.run("Professional tax payment due date", scope("gujarat"), rates, TODAY)
     assert resp.table.rows[0][0] == "Professional Tax (Gujarat)" and resp.table.rows[0][2] == "18 October 2026 (for September 2026)"
     missing = tools.run("Professional tax payment due date", scope("maharashtra"), rates, TODAY)
-    assert missing.answer.startswith("Due date not configured: due_dates.professional_tax.maharashtra")
+    assert "(due date not configured)" in missing.answer and "due_dates.professional_tax.maharashtra" in missing.note
+    assert "rates.yaml" not in missing.answer  # the public page must not tell visitors to edit a file
 
 
 def test_null_due_date_is_not_guessed(rates):
     resp = tools.run("When is ESIC due?", scope(), rates, TODAY)
-    assert resp.answer.startswith("Due date not configured: due_dates.esic") and "Test ESIC regulation" in resp.answer
+    assert "(due date not configured)" in resp.answer and "due_dates.esic" in resp.note and "Test ESIC regulation" in resp.answer
     both = tools.run("When are PF and ESIC due?", scope(), rates, TODAY)
     assert len(both.table.rows) == 1 and "Not configured yet: due_dates.esic" in both.answer
 

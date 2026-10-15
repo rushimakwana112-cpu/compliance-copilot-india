@@ -141,10 +141,9 @@ def run(question: str, scope: Scope, rates: dict[str, Any], today: date) -> Chat
             notes.append(f"{label}: {v['note']}")
     if missing and not rows:
         key, src = missing[0]
-        fill = f" Fill it from {src}." if src else ""
-        return ChatResponse(type="tool", tool="due_dates",
-                            answer=f"Due date not configured: {key}. It is empty in data/rates.yaml, so I won't guess.{fill}",
-                            note="Add the value with its source_doc and effective_from, then ask again.")
+        from app.tools import missing_answer  # imported here: app.tools imports this module
+
+        return missing_answer(key, src, what="due date", tool="due_dates")
     answer = "Due dates as of " + fmt(today) + ":"
     if notes:
         answer += "\n\n" + "\n".join(f"- {n}" for n in notes)

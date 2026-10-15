@@ -283,3 +283,22 @@ Eval: the second real run (after fixes 1–5) matched the baseline: 100% on ever
 **Bug (medium):** after PR #10 was live, the live page in a browser that had visited before still ran the old frontend (Ollama placeholder, no New-chat fix), while a fresh download had the new one. **Cause:** `/` was sent with no `Cache-Control` header, only `Last-Modified` and `ETag`, so browsers cached it "heuristically" (often for hours) without asking the server. **Fix:** `/` is now sent with `Cache-Control: no-cache`, which means "you may keep a copy, but check with me first"; the check is a cheap 304 using the ETag. Test: `test_index_serves_frontend`.
 
 **What to learn:** with no caching header, the browser decides how long to keep a page, so "I deployed it" and "users see it" are different things. For the HTML that loads your app, use `no-cache` so every visit checks for a new version; long caching is for files whose name changes with each version.
+
+## Audit fix 8: 47 real questions on the live site (16 Oct 2026)
+
+I asked the live site 47 questions the way employees and testers would (PF, ESIC, PT, CTC, tax, bonus, gratuity, overtime, leave, law, Hindi/Gujarati/Hinglish, wrong figures, edge cases) and checked every number against data/rates.yaml. The public limit of 60 questions a day per IP stopped the run after 44, as designed, so the remaining 3 were asked on the same code running locally. 36 answers were right (every calculator's arithmetic checked out). Fixed:
+
+- **CTC reply hijacked (high):** answering the 6 CTC questions returned the PF-rates FAQ instead of the in-hand salary. Causes: "employer share is **inside** CTC" wasn't understood (only "included" / "part of CTC"), so PF was asked again, and the FAQ then took over that follow-up because the reply mentions PF. Now "inside/within CTC" is understood, and the FAQ never answers a reply to our CTC questions. Result: ₹6 lakh CTC → ₹45,000 in hand, step by step.
+- **Overtime read as CTC (medium):** "overtime for 12 hours, monthly salary 26000" was answered as "in-hand salary from ₹12" because "monthly salary" + an amount counted as a CTC question. Overtime, bonus, leave encashment and gratuity messages are no longer CTC questions.
+- **"Is this correct?" compared with the wrong figure (medium):** "PF on basic 18000 = 2500" said "I get ₹4,410" (employee + employer total). Now it names the closest row ("Employee PF: ₹2,160") and the total.
+- **Developer text on the public site (medium):** a missing rate (Maharashtra PT, bonus ceiling) told visitors that data/rates.yaml is empty and to "fill it from…". Now one shared message says the figure isn't configured yet, won't be guessed, and to check with HR/payroll; the rates.yaml key is in the small note.
+- **Practical questions missed (low):** "how to withdraw pf" quoted a line of the Code; "what is standard deduction" said "not in my documents". The EPFO FAQ and the deductions FAQ now match them, and the deductions answer names both standard deductions from rates.yaml.
+
+Tests: 8 new in `tests/test_employee_phrasings.py`; 6 older assertions updated to the new wording.
+
+Not changed, for Rushi to decide:
+- **Rounding:** amounts are shown with Python's `round()`, which rounds .5 to the even number (EPS on ₹25,000 = ₹2,082.50 → ₹2,082). Confirm EPFO's rounding rule (it's one of the "- check" items) before changing it.
+- **Old chunk labels:** citations still show "Section 7 · The Cine" and "Section 49 · Through metatarso". The chunking fix in this log only applies after `python -m ingest.run --reindex`, which writes to Pinecone.
+- **Retrenchment notice** is refused because the Industrial Relations Code is commented out in data/sources.csv (not indexed). Indexing it also needs a re-index.
+
+**What to learn:** a calculator that is right on its own can still give a wrong *answer* when the routing in front of it sends the message to the wrong place, and only end-to-end questions catch that. Multi-turn flows are the most fragile part: one unrecognised word ("inside") and a helpful fallback (the FAQ) turned a correct calculation into an unrelated answer. When a flow is waiting for the user's reply, nothing else should be allowed to answer it.

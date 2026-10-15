@@ -304,10 +304,7 @@ def run(text: str, state: str, rates: dict[str, Any] | None = None, today: date 
     try:
         return _run(text, state, r, on)
     except RateMissing as e:
-        src = f" Fill it from {e.source_doc}." if e.source_doc else ""
-        return ChatResponse(type="tool", answer=f"Rate not configured: {e.key}. It is empty in data/rates.yaml for {on.isoformat()}, "
-                                                f"so I won't calculate.{src}",
-                            note="Add the value with its source_doc and effective_from, then ask again.")
+        return tools.missing_answer(e.key, e.source_doc, on)
 
 
 def _run(text: str, state: str, r: dict[str, Any], on: date) -> ChatResponse:

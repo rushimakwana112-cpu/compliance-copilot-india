@@ -44,16 +44,13 @@ def run(text: str, rates: dict[str, Any] | None = None, today: date | None = Non
             return overtime(text, r, on)
         return bonus(text, r, on)
     except RateMissing as e:
-        src = f" Fill it from {e.source_doc}." if e.source_doc else ""
         extra = ""
         if e.key.startswith("bonus."):
             mn, mx = rate(r, "bonus.min_rate", on), rate(r, "bonus.max_rate", on)
             extra = (f" The rule: bonus is {pct(mn.value)} to {pct(mx.value)} of the wages (basic + DA) earned in the "
                      f"accounting year ({mn.source_doc}, {mn.section}, {mx.section}), but where wages exceed the notified "
                      "ceiling it is worked out as if wages were that ceiling, which I can't apply yet.")
-        return ChatResponse(type="tool", answer=f"Rate not configured: {e.key}. It is empty in data/rates.yaml for "
-                                                f"{on.isoformat()}, so I won't calculate.{src}{extra}",
-                            note="Add the value with its source_doc and effective_from, then ask again.")
+        return tools.missing_answer(e.key, e.source_doc, on, extra)
 
 
 def bonus(text: str, r: dict[str, Any], on: date) -> ChatResponse:

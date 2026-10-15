@@ -6,7 +6,7 @@ Every rate comes from data/rates.yaml together with the document it was taken
 from, and that document is returned as the answer's citation. Each figure is a
 list of dated versions; the one valid on today's date (or on a date written in
 the question) is used. A rate that hasn't been filled in yields
-"Rate not configured: <field>", never a guess.
+"I can't work this out yet (rate not configured)" with the missing key in the note, never a guess.
 """
 
 from __future__ import annotations
@@ -36,6 +36,21 @@ class RateMissing(Exception):
     def __init__(self, key: str, source_doc: str = "") -> None:
         super().__init__(key)
         self.key, self.source_doc = key, source_doc
+
+
+def missing_answer(key: str, source_doc: str, on: date | None = None, extra: str = "",
+                   what: str = "rate", tool: str | None = None) -> ChatResponse:
+    """The answer when a figure isn't in rates.yaml yet: plain words for the user, the rates.yaml key in the note
+    for whoever maintains the file (it used to tell visitors of the public site to edit data/rates.yaml)."""
+    when = f" for {on.day} {on:%B %Y}" if on else ""
+    src = f" The official figure comes from {source_doc.removeprefix('TODO: ')}." if source_doc else ""
+    return ChatResponse(
+        type="tool", tool=tool,
+        answer=f"I can't work this out yet ({what} not configured): the official figure it needs isn't in my "
+               f"rates{when}, so I won't guess.{src}{extra}\n\nPlease check with HR/payroll or the official source.",
+        note=f"{what.capitalize()} not configured: {key} is empty in data/rates.yaml. "
+             "Add it with its source_doc and effective_from.",
+    )
 
 
 @dataclass
@@ -380,9 +395,4 @@ def run(question: str, scope: Scope, rates: dict[str, Any] | None = None, today:
             return professional_tax(scope.primary, amount, rates, on)
         return pf_calculator(amount, rates, on)
     except RateMissing as e:
-        src = f" Fill it from {e.source_doc.removeprefix('TODO: ')}." if e.source_doc else ""
-        return ChatResponse(
-            type="tool", answer=f"Rate not configured: {e.key}. It is empty in data/rates.yaml for {on.isoformat()}, "
-                                f"so I won't calculate.{src}",
-            note="Add the value with its source_doc and effective_from, then ask again.",
-        )
+        return missing_answer(e.key, e.source_doc, on)

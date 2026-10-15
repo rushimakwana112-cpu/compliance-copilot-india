@@ -128,6 +128,8 @@ CTC_INTENT = re.compile(r"\bctc\b|\bcost to company\b|\bpackage\b|\blpa\b", re.I
 INHAND_INTENT = re.compile(r"\bin-hand\b|\bin hand\b|\btake[- ]?home\b|\bnet (?:salary|pay)\b|\bhow much will i get\b|\bmonthly salary\b"
                            r"|\bsalary (?:will be|would be)\b|\bwhat will (?:be )?my salary\b", re.IGNORECASE)
 CTC_MARK = "To work out your in-hand salary"
+# Calculations that mention a salary but aren't CTC → in-hand (app/labour.py, the gratuity calculator).
+OTHER_CALC = re.compile(r"\bover ?time\b|\bbonus\b|\bleave encash\w*|\bencash\w*\b|\bgratuity\b", re.IGNORECASE)
 
 QUESTIONS = {
     "kind": "Is that amount your CTC (cost to company) or your gross salary?",
@@ -161,7 +163,7 @@ class CTC:
 
 def is_ctc_question(text: str) -> bool:
     """'My CTC is 6 LPA, in-hand?' or 'salary 25k in-hand?' (an amount plus in-hand)."""
-    if PAID_DAYS.search(text):  # "salary for 20 days…" is a per-day calculation
+    if PAID_DAYS.search(text) or OTHER_CALC.search(text):  # "salary for 20 days…", "overtime…, monthly salary 26000"
         return False
     if CTC_INTENT.search(text):
         return bool(INHAND_INTENT.search(text) or re.search(r"\bsalary\b|\bmonthly\b", text, re.I))
@@ -226,7 +228,8 @@ def _parse_pf(part: str, c: CTC) -> None:
         c.pf_full = False
     if re.search(r"\b(?:not included|excluded|not part of|over and above|on top|separate|outside)\b", t):
         c.er_in_ctc = False
-    elif re.search(r"\bincluded\b|\bpart of (?:the )?ctc\b|\bin (?:my |the )?ctc\b|\binclusive\b", t):
+    elif re.search(r"\bincluded\b|\bpart of (?:the )?ctc\b|\b(?:in|inside|within) (?:my |the )?ctc\b|\binclusive\b"
+                   r"|\bctc includes\b", t):
         c.er_in_ctc = True
     if yn is None and (c.pf_full is not None or c.er_in_ctc is not None):
         yn = True  # "PF on full basic, included" means PF applies
@@ -477,10 +480,7 @@ def _compute(c: CTC, monthly: float, state: str, r: dict[str, Any], on: date) ->
 
 
 def _missing(e: RateMissing, on: date) -> ChatResponse:
-    src = f" Fill it from {e.source_doc}." if e.source_doc else ""
-    return ChatResponse(type="tool", answer=f"Rate not configured: {e.key}. It is empty in data/rates.yaml for "
-                                            f"{on.isoformat()}, so I won't calculate.{src}",
-                        note="Add the value with its source_doc and effective_from, then ask again.")
+    return tools.missing_answer(e.key, e.source_doc, on)
 
 
 # ----------------------------------------------------------------- per-day, loss of pay, first/last month

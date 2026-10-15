@@ -99,7 +99,8 @@ def early(services: Services, req: ChatRequest, which: str) -> tuple[Turn, ChatR
         return Turn(req.message, req.message, scope, "guide", trace, which), resp
     text, history, today = req.message, req.history, date.today()
     resp = None
-    if salary.ctc_conversation(text, history):  # a reply to the CTC questions comes first
+    convo = salary.ctc_conversation(text, history)
+    if convo:  # a reply to the CTC questions comes first
         resp = salary.run(text, history, scope.primary, None, today)
     elif tax.wants(text):
         resp = tax.run(text, scope.primary, None, today)
@@ -108,7 +109,11 @@ def early(services: Services, req: ChatRequest, which: str) -> tuple[Turn, ChatR
     elif salary.wants(text, history):
         resp = salary.run(text, history, scope.primary, None, today)
     route_ = "tool"
-    if (resp is None or (resp.type == "guide" and not faq.AMOUNT.search(text))) and (entry := faq.match(text)) is not None:
+    # Never in reply to our CTC questions: "3. PF on full basic…" is an answer, not a PF FAQ. (A first message
+    # like "difference between CTC and gross salary?" is still an explanation.)
+    replying = bool(convo and len(convo) > 1)
+    if not replying and (resp is None or (resp.type == "guide" and not faq.AMOUNT.search(text))) \
+            and (entry := faq.match(text)) is not None:
         # "What is the difference between CTC and gross?" is an explanation, not a calculation waiting for figures
         resp, route_ = faq.answer(entry, None, today), "guide"
     if resp is None:

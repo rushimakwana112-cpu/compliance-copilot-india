@@ -12,7 +12,8 @@ TODAY = date(2026, 10, 15)
 
 def test_bonus_waits_for_the_notified_ceiling():
     r = labour.run("bonus on 15000 salary for 12 months", None, TODAY)
-    assert "Rate not configured: bonus.calculation_ceiling" in r.answer and "8.33%" in r.answer
+    assert "(rate not configured)" in r.answer and "bonus.calculation_ceiling" in r.note and "8.33%" in r.answer
+    assert "rates.yaml" not in r.answer
 
 
 def test_bonus_with_a_configured_ceiling():

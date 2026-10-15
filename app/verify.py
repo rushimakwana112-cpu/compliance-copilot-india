@@ -45,6 +45,21 @@ def compare(resp: ChatResponse, claim: float) -> str | None:
     mine = inr(claim)
     if mine in figures:
         return f"Your figure {mine} matches my calculation. The steps are below."
+    if resp.table and len(resp.table.rows) > 1:
+        # "PF on basic 18000 = 2500" means the employee's share, not the employee + employer total: name the
+        # row closest to the user's figure, and the total only if that is a different row
+        labelled = [(str(r[0]), str(r[-1])) for r in resp.table.rows if MONEY.fullmatch(str(r[-1]))]
+        if labelled:
+            label, value = min(labelled, key=lambda lv: abs(_rupees(lv[1]) - claim))
+            line = f"Your figure {mine} doesn't match my calculation. The closest figure is {label}: {value}"
+            last_label, last_value = labelled[-1]
+            if (label, value) != (last_label, last_value):
+                line += f" ({last_label}: {last_value})"
+            return line + ". Compare your steps with the ones below."
     bold = re.search(r"\*\*(-?₹[\d,]+)", resp.answer)
     result = bold.group(1) if bold else (resp.table.rows[-1][-1] if resp.table else figures[-1])
     return f"Your figure {mine} doesn't match: I get {result}. Compare your steps with the ones below."
+
+
+def _rupees(text: str) -> float:
+    return float(text.replace("₹", "").replace(",", ""))

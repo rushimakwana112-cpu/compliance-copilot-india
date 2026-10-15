@@ -60,7 +60,8 @@ def test_current_version_wins_while_dates_are_unknown():
 def test_null_value_says_rate_not_configured(rates):
     rates["pf"]["edli_rate"][0]["value"] = None
     out = run("Calculate PF for basic ₹18,000", Scope(["gujarat"], "default"), rates, TODAY)
-    assert out.answer.startswith("Rate not configured: pf.edli_rate.") and out.table is None
+    assert "(rate not configured)" in out.answer and "pf.edli_rate" in out.note and out.table is None
+    assert "rates.yaml" not in out.answer
 
 
 @pytest.mark.parametrize("text, expected", [
@@ -109,7 +110,7 @@ def test_shipped_rates_calculate_with_their_source():
 def test_shipped_rates_refuse_what_is_not_configured():
     # Maharashtra PT is still empty in rates.yaml: refuse, don't guess.
     out = run("Calculate professional tax on ₹15,000 salary in Pune", Scope(["maharashtra"], "default"), load_rates(), TODAY)
-    assert out.answer.startswith("Rate not configured: professional_tax.maharashtra") and out.table is None
+    assert "(rate not configured)" in out.answer and "professional_tax.maharashtra" in out.note and out.table is None
     # No gratuity ceiling is notified yet: the amount is shown uncapped and says so.
     g = run("Calculate gratuity for last basic + DA ₹40,000 and 7 years", Scope(["gujarat"], "default"), load_rates(), TODAY)
     assert any(row[0] == "Ceiling" and "not capped" in row[1] for row in g.table.rows)
