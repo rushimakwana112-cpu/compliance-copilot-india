@@ -184,3 +184,50 @@ def test_pages_are_ints_in_citations(services, store, llm):
     assert all(type(c.page) is int for c in resp.citations)
     prompt = llm.calls[-1][1]["content"]
     assert re.search(r"p\. 4\d ·", prompt) and not re.search(r"p\. \d+\.0", prompt)
+
+
+def test_named_document_wins_and_filters(services, store):
+    text = "wages means all remuneration payable to an employee including basic pay and dearness allowance"
+    store.add(text + " under the old law", doc="Minimum Wages Act, 1948", section="Section 2", page=1,
+              scope="central", status="current", doc_type="act")
+    store.add(text, doc="Code on Wages, 2019", section="Section 2 · Definitions", page=3,
+              scope="central", status="current", doc_type="act")
+    store.add("Code on Social Security definition of wages refers to the Code on Wages", doc="Code on Social Security, 2020",
+              section="Section 2", page=5, scope="central", status="current", doc_type="act")
+    passages = rag.retrieve(services, "what does wages include under the Code on Wages", Scope(["gujarat"], "default"))
+    assert {p.doc for p in passages} == {"Code on Wages, 2019"}  # results from the named document exist → only those
+    plain = rag.retrieve(services, "what does wages include", Scope(["gujarat"], "default"))
+    assert len({p.doc for p in plain}) > 1
+
+
+def test_named_document_missing_keeps_other_results(services, store):
+    seed(store)
+    passages = rag.retrieve(services, "gratuity for fixed term employee under the EPF Scheme", Scope(["gujarat"], "default"))
+    assert passages  # no EPF Scheme chunks: nothing is filtered away
+
+
+def test_definition_question_boosts_the_defined_term(services, store):
+    store.add("employee means any person employed on wages to do skilled or unskilled work", doc="Code on Wages, 2019",
+              section="Section 2 · Definitions", page=3, term="employee", scope="central", status="current", doc_type="act")
+    store.add("wages means all remuneration; employee wages include basic pay", doc="Code on Wages, 2019",
+              section="Section 2 · Definitions", page=4, term="wages", scope="central", status="current", doc_type="act")
+    question = "What is the definition of wages?"
+    passages = rag.retrieve(services, question, Scope(["gujarat"], "default"))
+    top = passages[0]
+    assert top.term == "wages" and top.rank_score - top.score >= rag.TERM_BOOST - 1e-9
+    assert rag.Signals.of(question).term == "wage"
+
+
+def test_section_title_boost(services, store):
+    body = "The employer shall pay the amount within thirty days to the eligible employee"
+    store.add(body + " as bonus", doc="Code on Wages, 2019", section="Section 26", page=10,
+              chapter="Chapter IV — Payment Of Bonus", heading="Eligibility for bonus",
+              scope="central", status="current", doc_type="act")
+    store.add(body + " as wages", doc="Code on Wages, 2019", section="Section 17", page=6,
+              chapter="Chapter III — Payment Of Wages", heading="Time limit for payment of wages",
+              scope="central", status="current", doc_type="act")
+    passages = rag.retrieve(services, "when must bonus be paid to the employee", Scope(["gujarat"], "default"))
+    bonus = next(p for p in passages if p.section == "Section 26")
+    wages = next(p for p in passages if p.section == "Section 17")
+    assert bonus.rank_score - bonus.score == pytest.approx(rag.HEADING_BOOST) and wages.rank_score == wages.score
+    assert passages[0].section == "Section 26"

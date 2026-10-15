@@ -22,6 +22,9 @@ from app.services import Services
 from app.vectorstore import scope_filter
 
 DOC_TYPE_BOOST = 0.03
+DOC_NAME_BOOST = 0.08  # the question names this document ("under the Code on Wages")
+TERM_BOOST = 0.08  # "definition of wages" and this chunk defines "wages"
+HEADING_BOOST = 0.05  # the chunk's chapter or heading is about the question's topic
 SNIPPET_CHARS = 320
 NEIGHBOUR_CHARS = 900  # how much of the previous / next chunk is added around each passage
 NOT_FOUND = "NOT_FOUND"
@@ -155,16 +158,97 @@ def wanted_doc_types(question: str) -> set[str]:
     return {t for t, pat in DOC_TYPE_HINTS.items() if re.search(pat, question.strip(), re.IGNORECASE)}
 
 
-def _passage(meta: dict, score: float, boost_types: set[str]) -> Passage:
+# Ways people name a document → words that must all appear in the document's name.
+DOC_NAMES: list[tuple[str, list[tuple[str, ...]]]] = [
+    (r"\bcode on wages\b|\bwages? code\b", [("code", "wages")]),
+    (r"\bcode on social security\b|\bsocial security code\b|\bss code\b", [("social", "security")]),
+    (r"\bindustrial relations code\b|\bcode on industrial relations\b|\bir code\b", [("industrial", "relations")]),
+    (r"\bosh code\b|\boccupational safety\b", [("occupational", "safety")]),
+    (r"\bepf scheme\b|\bprovident funds? scheme\b", [("provident", "scheme"), ("epf", "scheme")]),
+    (r"\beps\b|\bpension scheme\b", [("pension", "scheme")]),
+    (r"\besi act\b|\bstate insurance act\b", [("state", "insurance", "act"), ("esi", "act")]),
+    (r"\bgratuity act\b", [("gratuity", "act")]),
+    (r"\bbonus act\b", [("bonus", "act")]),
+    (r"\bminimum wages act\b", [("minimum", "wages", "act")]),
+    (r"\bpayment of wages act\b", [("payment", "wages", "act")]),
+    (r"\bmaternity benefit act\b", [("maternity", "act")]),
+]
+# Question topic → words to look for in a chunk's chapter, heading or section label.
+HEADING_TOPICS: list[tuple[str, str]] = [
+    (r"\bgratuity\b", r"gratuity"),
+    (r"\bbonus\b", r"bonus"),
+    (r"\bmaternity\b", r"maternity"),
+    (r"\besic?\b|state insurance", r"state insurance|\besic?\b"),
+    (r"\bp\.?f\b|\bepf\b|provident fund", r"provident fund"),
+    (r"\bpension\b|\beps\b", r"pension"),
+    (r"\bminimum wages?\b", r"minimum wage"),
+    (r"\bovertime\b", r"overtime"),
+    (r"\bretrench\w*|\blay-?off\b|\bclosure\b", r"retrench|lay-?off|closure"),
+    (r"\bleave\b", r"leave"),
+    (r"\bdefinitions?\b|\bdefine\b|\bmeaning\b", r"definition"),
+]
+TERM_QUESTION = re.compile(
+    r"\b(?:what (?:is|are) (?:the )?(?:definition of |meaning of |meant by )?|definition of|define|meaning of)"
+    r"\s*(?:the |a |an )?(?:term |word )?[\"'“‘]?"
+    r"(?P<term>[a-z][a-z' -]{1,40}?)[\"'”’]?\s*(?:\b(?:under|in|as per|according to|per|for)\b.*)?[?.]*\s*$",
+    re.IGNORECASE,
+)
+
+
+def _words(text: str) -> set[str]:
+    return set(re.sub(r"[^a-z0-9]+", " ", text.lower()).split())
+
+
+def _singular(term: str) -> str:
+    term = re.sub(r"\s+", " ", term.lower().strip(" '\"“”‘’"))
+    return term[:-1] if term.endswith("s") and not term.endswith("ss") else term
+
+
+@dataclass
+class Signals:
+    """What the question says about where the answer lives, used to re-rank matches."""
+
+    doc_types: set[str]
+    doc_keys: list[tuple[str, ...]]  # each tuple: words a named document's title must contain
+    term: str  # "wages" for "definition of wages"
+    topics: list[str]  # heading patterns to boost
+
+    @classmethod
+    def of(cls, question: str) -> Signals:
+        q = question.lower()
+        keys = [k for pat, ks in DOC_NAMES if re.search(pat, q) for k in ks]
+        m = TERM_QUESTION.search(question.strip())
+        topics = [head for pat, head in HEADING_TOPICS if re.search(pat, q)]
+        return cls(wanted_doc_types(question), keys, _singular(m.group("term")) if m else "", topics)
+
+    def names_doc(self, doc: str) -> bool:
+        words = _words(doc)
+        return any(all(k in words for k in ks) for ks in self.doc_keys)
+
+    def boost(self, p: Passage) -> float:
+        b = DOC_TYPE_BOOST if p.doc_type in self.doc_types else 0.0
+        if self.doc_keys and self.names_doc(p.doc):
+            b += DOC_NAME_BOOST
+        if self.term and p.term and _singular(p.term) == self.term:
+            b += TERM_BOOST
+        where = f"{p.chapter} {p.heading} {p.section}".lower()
+        if any(re.search(t, where) for t in self.topics):
+            b += HEADING_BOOST
+        return b
+
+
+def _passage(meta: dict, score: float, signals: Signals) -> Passage:
     doc_type = str(meta.get("doc_type", ""))
-    return Passage(
+    p = Passage(
         doc=str(meta.get("doc", "")), section=str(meta.get("section", "")), page=as_int(meta.get("page")),
-        score=score, rank_score=score + (DOC_TYPE_BOOST if doc_type in boost_types else 0.0),
+        score=score, rank_score=score,
         text=str(meta.get("text", "")), url=str(meta.get("source_url", "")), status=str(meta.get("status", "current")),
         effective_date=str(meta.get("effective_date", "")), doc_type=doc_type, scope=str(meta.get("scope", "")),
         chunk_no=as_int(meta.get("chunk_no")), chapter=str(meta.get("chapter", "") or ""),
         heading=str(meta.get("heading", "") or ""), term=str(meta.get("term", "") or ""),
     )
+    p.rank_score = score + signals.boost(p)
+    return p
 
 
 def _strip_overlap(text: str) -> str:
@@ -223,8 +307,8 @@ def retrieve(services: Services, question: str, scope: Scope, trace: Trace | Non
     if services.store is None:
         raise SearchError(services.store_error or "Pinecone is not configured")
     statuses = ("current", "repealed", "historical") if REPEALED_HINT.search(question) else ("current",)
-    boost = wanted_doc_types(question)
-    per_state_keep = s.keep_k if len(scope.states) == 1 else max(2, s.keep_k - 1)
+    signals = Signals.of(question)
+    per_state_keep = s.keep_k if len(scope.states) == 1 else max(2, s.keep_k - 2)
     kept: dict[tuple, Passage] = {}
     trace.searched = True
     for state in scope.states:
@@ -236,7 +320,12 @@ def retrieve(services: Services, question: str, scope: Scope, trace: Trace | Non
             raise SearchError(f"{e.__class__.__name__}: {str(e)[:160]}") from e
         for m in matches:
             trace.add(m.id, m.score, m.metadata)
-        ranked = sorted((_passage(m.metadata, m.score, boost) for m in matches), key=lambda p: p.rank_score, reverse=True)
+        candidates = [_passage(m.metadata, m.score, signals) for m in matches]
+        if signals.doc_keys and len(scope.states) == 1:
+            # "under the Code on Wages": when that document was found, answer from it alone.
+            named = [p for p in candidates if signals.names_doc(p.doc)]
+            candidates = named or candidates
+        ranked = sorted(candidates, key=lambda p: p.rank_score, reverse=True)
         for p in ranked[:per_state_keep]:
             kept.setdefault((p.doc, p.page, p.text[:80]), p)
     if not trace.matches:
