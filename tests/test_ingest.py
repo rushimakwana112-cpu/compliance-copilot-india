@@ -140,3 +140,27 @@ def test_ingest_is_idempotent_and_replaces_changed_files(act_pdf, services, stor
 def test_dry_run_touches_nothing(act_pdf, services, store):
     assert ingest_file(act_pdf, META, store, dry_run=True).status == "dry-run"
     assert store.count() == 0 and catalog.read_manifest() == {}
+
+
+def test_reindex_replaces_old_chunks_even_when_file_is_unchanged(act_pdf, store):
+    first = ingest_file(act_pdf, META, store)
+    # a vector left over from the old chunking scheme, same document prefix
+    store.add("old 1,000-char chunk", doc="code-on-social-security-2020")
+    store.records["code-on-social-security-2020#old"] = store.records.popitem()[1]
+    assert ingest_file(act_pdf, META, store).status == "unchanged"
+    again = ingest_file(act_pdf, META, store, reindex=True)
+    assert again.status == "re-indexed" and again.deleted == first.chunks + 1
+    assert "code-on-social-security-2020#old" not in store.records and store.count() == again.chunks
+
+
+def test_reindex_includes_uploaded_pdfs(act_pdf, store, tmp_path, monkeypatch):
+    from ingest import run as run_mod
+
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    (uploads / "esic-circular.pdf").write_bytes(act_pdf.read_bytes())
+    monkeypatch.setattr(run_mod, "UPLOAD_DIR", uploads)
+    catalog.update_manifest("ESIC circular", {"scope": "gujarat", "status": "current", "chunks": 3})
+    rows = run_mod.uploaded_rows([])
+    assert [r["doc"] for r in rows] == ["ESIC circular"] and rows[0]["scope"] == "gujarat"
+    assert run_mod.uploaded_rows([{"doc": "ESIC circular"}]) == []  # listed in sources.csv: handled there

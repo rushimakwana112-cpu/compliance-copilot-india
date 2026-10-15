@@ -193,7 +193,7 @@ url,doc,scope,status,effective_date,doc_type
 https://…/notification.pdf,"ESIC wage-ceiling notification",central,current,2025-11-21,notification
 ```
 
-then run `python -m ingest.run --only "ESIC"`. Files are downloaded once into `data/raw/` with their sha256 in `data/manifest.json`. Re-running is safe: unchanged files are skipped, and a changed file's old vectors are deleted before re-indexing (preview with `--dry-run`). `scope` is `central` or a state id; `status` is `current`, `repealed` or `historical`.
+then run `python -m ingest.run --only "ESIC"`. Files are downloaded once into `data/raw/` with their sha256 in `data/manifest.json`. Re-running is safe: unchanged files are skipped, and a changed file's old vectors are deleted before re-indexing (preview with `--dry-run`). After a change to the chunking, run `python -m ingest.run --reindex`: it deletes every document's old vectors and indexes it again, including PDFs uploaded from the sidebar. `scope` is `central` or a state id; `status` is `current`, `repealed` or `historical`.
 
 **Rates for the calculators** live only in `data/rates.yaml`. Each value has `source_doc` and `effective_date`; the shipped file has every value as `null`, so calculators answer *"rate not configured"* until you fill them from the official circular.
 
