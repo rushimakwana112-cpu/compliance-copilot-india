@@ -10,7 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
-Route = Literal["rag", "tool", "sql", "not_found", "error"]  # error: the search itself failed
+Route = Literal["rag", "tool", "sql", "guide", "not_found", "error"]  # error: the search itself failed
+# guide: a fixed answer that needs no search: what the bot can't do, or a question asking for missing details
 MAX_MESSAGE_CHARS = 1000
 MAX_HISTORY_MESSAGES = 8  # 4 turns of user + assistant
 

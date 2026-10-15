@@ -10,7 +10,7 @@ Skipped questions are listed in the report but left out of every metric:
     skipped (rate limited)       the provider still refused after waiting out its retry-after once
 
 Metrics
-    route accuracy     the router picked the expected path (not_found questions: rag, or refused up front as out_of_scope)
+    route accuracy     the router picked the expected path (not_found questions: rag, or refused up front)
     retrieval hit@4    the expected document is among the first 4 passages, cited ones first (rag questions)
     answer contains    the answer contains the expected phrases (a|b = any of, a&b = all of; case-insensitive)
     not_found prec.    of the answers that refused, how many were supposed to refuse
@@ -83,10 +83,11 @@ def _contains(expected: str, text: str) -> bool:
 
 def score(row: Row, route: str, resp: ChatResponse) -> dict[str, bool | None]:
     """Per-question checks. None = not applicable to this question."""
-    expected_route = row.type if row.type in ("rag", "tool", "sql") else "rag"
+    expected_route = row.type if row.type in ("rag", "tool", "sql", "guide") else "rag"
     text = resp.answer + " " + " ".join(" ".join(r) for r in (resp.table.rows if resp.table else []))
     return {
-        "route": route == expected_route or (row.type == "not_found" and route == "out_of_scope"),
+        # not_found questions may be refused up front: a foreign place (out_of_scope) or off-topic chat (guide)
+        "route": route == expected_route or (row.type == "not_found" and route in ("out_of_scope", "guide")),
         "hit@4": _any_in(row.expected_doc, " ".join(c.doc for c in [*resp.citations, *resp.other_citations][:4]))
         if row.type == "rag" and row.expected_doc else None,
         "contains": _contains(row.expected_answer_contains, text) if row.expected_answer_contains else None,

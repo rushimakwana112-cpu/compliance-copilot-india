@@ -609,8 +609,9 @@ def answer_style(question: str, answer: str) -> str:
     return rest[:1].upper() + rest[1:] if rest != answer and rest else answer
 
 
-def build_messages(question: str, passages: list[Passage], scope: Scope) -> list[dict[str, str]]:
-    """System prompt + numbered passages. Passage order = citation numbers."""
+def build_messages(question: str, passages: list[Passage], scope: Scope, lang: str = "en") -> list[dict[str, str]]:
+    """System prompt + numbered passages. Passage order = citation numbers. `lang` other than "en" asks for the
+    answer in that language (see app/lang.py); NOT_FOUND stays in English."""
     blocks = [passage_block(i, p) for i, p in enumerate(passages, 1)]
     system = SYSTEM_PROMPT + f"\nJurisdiction searched: {scope.label()}."
     if coverage_topic(question):
@@ -619,6 +620,10 @@ def build_messages(question: str, passages: list[Passage], scope: Scope) -> list
         system += "\n" + COMPARE_RULE.format(states=", ".join(scope.label().split(" + ")[1:]))
     style = ("This is a yes/no question: start with Yes or No." if is_yes_no(question)
              else "This is not a yes/no question: start with the answer itself, not with Yes or No.")
+    if lang != "en":
+        from app.lang import NAMES
+
+        style += f"\nWrite the answer in {NAMES.get(lang, lang)}, keeping numbers, citations like [1] and terms like PF in English."
     user = "Passages:\n\n" + "\n\n".join(blocks) + f"\n\nQuestion: {question}\n{style}"
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
@@ -723,19 +728,20 @@ def prepare(services: Services, question: str, scope: Scope,
 
 
 def answer(services: Services, question: str, scope: Scope,
-           trace: Trace | None = None) -> tuple[ChatResponse, list[Passage]]:
+           trace: Trace | None = None, lang: str = "en") -> tuple[ChatResponse, list[Passage]]:
     """Non-streaming RAG answer."""
     passages, early = prepare(services, question, scope, trace)
     if early:
         return early, passages
-    messages = build_messages(question, passages, scope)
+    messages = build_messages(question, passages, scope, lang)
     if trace is not None:
         trace.prompt_tokens = estimate_tokens(messages)
     raw = services.llm.chat(messages)
     return finish(raw, passages, scope, question), passages
 
 
-def stream(services: Services, question: str, scope: Scope, trace: Trace | None = None) -> Iterator[tuple[str, object]]:
+def stream(services: Services, question: str, scope: Scope, trace: Trace | None = None,
+           lang: str = "en") -> Iterator[tuple[str, object]]:
     """Yield ("token", str) while generating, then ("done", ChatResponse).
 
     The first few characters are held back until we know the model didn't
@@ -745,7 +751,7 @@ def stream(services: Services, question: str, scope: Scope, trace: Trace | None 
     if early:
         yield "done", early
         return
-    messages = build_messages(question, passages, scope)
+    messages = build_messages(question, passages, scope, lang)
     if trace is not None:
         trace.prompt_tokens = estimate_tokens(messages)
     raw, released = "", False
