@@ -69,3 +69,20 @@ def test_no_hard_coded_legal_numbers():
                 if re.search(LEGAL_NUMBER, line) and "rgba(" not in line:
                     hits.append(f"{path.relative_to(ROOT)}:{n}: {line.strip()[:80]}")
     assert hits == []
+
+
+def test_publish_readiness():
+    """The public demo: PUBLIC_MODE on, rate limit and cache on, .env never committed, wake-up notice shown."""
+    from app.config import Settings
+
+    svc = yaml.safe_load((ROOT / "render.yaml").read_text())["services"][0]
+    env = {e["key"]: e for e in svc["envVars"]}
+    assert env["PUBLIC_MODE"]["value"] == "true" and svc["healthCheckPath"] == "/healthz"
+    s = Settings(_env_file=None)
+    assert s.rate_limit_per_min > 0 and s.rate_limit_per_day > 0 and s.cache_size > 0
+    ignored = [ln.strip() for ln in (ROOT / ".gitignore").read_text().splitlines()]
+    assert ".env" in ignored
+    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
+    assert ".env" not in tracked and ".env.example" in tracked
+    html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    assert "Waking up the server" in html and 'fetch(API_BASE + "/api/health"' in html
