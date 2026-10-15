@@ -114,6 +114,7 @@ class Passage:
     heading: str = ""
     term: str = ""
     context: str = ""  # text sent to the model: the chunk plus the end of the previous and start of the next
+    pinned: bool = False  # defines the question's term: sent to the model whatever its score
 
     def citation(self) -> Citation:
         """Citations always point at the main chunk, not at the neighbours added for context."""
@@ -188,7 +189,7 @@ HEADING_TOPICS: list[tuple[str, str]] = [
     (r"\bdefinitions?\b|\bdefine\b|\bmeaning\b", r"definition"),
 ]
 TERM_QUESTION = re.compile(
-    r"\b(?:what (?:is|are) (?:the )?(?:definition of |meaning of |meant by )?|definition of|define|meaning of)"
+    r"\b(?:(?:what|who) (?:is|are) (?:the )?(?:definition of |meaning of |meant by )?|definition of|define|meaning of)"
     r"\s*(?:the |a |an )?(?:term |word )?[\"'“‘]?"
     r"(?P<term>[a-z][a-z' -]{1,40}?)[\"'”’]?\s*(?:\b(?:under|in|as per|according to|per|for)\b.*)?[?.]*\s*$",
     re.IGNORECASE,
@@ -199,9 +200,52 @@ def _words(text: str) -> set[str]:
     return set(re.sub(r"[^a-z0-9]+", " ", text.lower()).split())
 
 
+EMPLOY_WORDS = {"employee", "employer", "employment"}
+# "who is covered ..." asks about coverage, not about a defined term.
+NOT_TERMS = {"covered", "applicable", "eligible", "liable", "entitled", "responsible", "required", "exempt", "it", "this"}
+
+
+def _word_singular(w: str) -> str:
+    if w.endswith("ies") and len(w) > 4:
+        return w[:-3] + "y"
+    return w[:-1] if w.endswith("s") and not w.endswith(("ss", "us", "is")) else w
+
+
 def _singular(term: str) -> str:
-    term = re.sub(r"\s+", " ", term.lower().strip(" '\"“”‘’"))
-    return term[:-1] if term.endswith("s") and not term.endswith("ss") else term
+    """Lowercase, no quotes or hyphens, single spaces, each word singular: '“Fixed-Term Employees”' → 'fixed term employee'."""
+    term = re.sub(r"[-‐–]", " ", term.lower())
+    words = re.sub(r"[^a-z0-9' ]+", " ", term).replace("'", " ").split()
+    return " ".join(_word_singular(w) for w in words)
+
+
+def term_key(term: str) -> str:
+    """Comparable form of a defined term. In a compound ("fixed term employee"), employee, employer and
+    employment are treated as the same word, because questions and Acts word these differently."""
+    words = _singular(term).split()
+    if len(words) > 1 and words[-1] in EMPLOY_WORDS:
+        words[-1] = "employ*"
+    return " ".join(words)
+
+
+def same_term(a: str, b: str) -> bool:
+    return bool(a and b) and term_key(a) == term_key(b)
+
+
+def term_variants(term: str) -> list[str]:
+    """Spellings a chunk's `term` metadata might use for `term`, for an exact-match filter."""
+    words = _singular(term).split()
+    if not words:
+        return []
+    last = words[-1]
+    lasts = sorted(EMPLOY_WORDS) if len(words) > 1 and last in EMPLOY_WORDS else [last]
+    out: list[str] = []
+    for end in lasts:
+        for form in (end, end + "s" if not end.endswith("s") else end):
+            head = words[:-1]
+            out.append(" ".join([*head, form]))
+            if len(head) >= 1:
+                out.append("-".join(head) + " " + form if len(head) > 1 else head[0] + "-" + form)
+    return sorted(set(out))
 
 
 @dataclass
@@ -218,8 +262,11 @@ class Signals:
         q = question.lower()
         keys = [k for pat, ks in DOC_NAMES if re.search(pat, q) for k in ks]
         m = TERM_QUESTION.search(question.strip())
+        term = _singular(m.group("term")) if m else ""
+        if term in NOT_TERMS:
+            term = ""
         topics = [head for pat, head in HEADING_TOPICS if re.search(pat, q)]
-        return cls(wanted_doc_types(question), keys, _singular(m.group("term")) if m else "", topics)
+        return cls(wanted_doc_types(question), keys, term, topics)
 
     def names_doc(self, doc: str) -> bool:
         words = _words(doc)
@@ -229,7 +276,7 @@ class Signals:
         b = DOC_TYPE_BOOST if p.doc_type in self.doc_types else 0.0
         if self.doc_keys and self.names_doc(p.doc):
             b += DOC_NAME_BOOST
-        if self.term and p.term and _singular(p.term) == self.term:
+        if same_term(self.term, p.term):
             b += TERM_BOOST
         where = f"{p.chapter} {p.heading} {p.section}".lower()
         if any(re.search(t, where) for t in self.topics):
@@ -328,9 +375,36 @@ def retrieve(services: Services, question: str, scope: Scope, trace: Trace | Non
         ranked = sorted(candidates, key=lambda p: p.rank_score, reverse=True)
         for p in ranked[:per_state_keep]:
             kept.setdefault((p.doc, p.page, p.text[:80]), p)
+    pinned = _definition_passages(services, question, scope, statuses, signals, trace)
+    for p in pinned:
+        kept.pop((p.doc, p.page, p.text[:80]), None)
     if not trace.matches:
         raise SearchError(f"Pinecone index '{trace.index}' returned 0 matches for filter {trace.filters}")
-    return sorted(kept.values(), key=lambda p: p.rank_score, reverse=True)
+    return pinned + sorted(kept.values(), key=lambda p: p.rank_score, reverse=True)
+
+
+def _definition_passages(services: Services, question: str, scope: Scope, statuses: tuple[str, ...],
+                         signals: Signals, trace: Trace) -> list[Passage]:
+    """Chunks whose `term` is the question's subject ("What is a fixed term employee?"), found by an exact
+    metadata filter. They are always sent to the model, because a definition can score low on similarity."""
+    variants = term_variants(signals.term) if signals.term else []
+    if not variants:
+        return []
+    flt = {**scope_filter(scope.states, statuses), "term": {"$in": variants}}
+    trace.filters.append(flt)
+    try:
+        matches = services.store.search(question, 3, flt)  # type: ignore[union-attr]
+    except Exception as e:  # noqa: BLE001 — the main search already worked; carry on without the pin
+        log.warning("Definition lookup failed for %r: %s", signals.term, e)
+        return []
+    out = []
+    for m in matches:
+        trace.add(m.id, m.score, m.metadata)
+        p = _passage(m.metadata, m.score, signals)
+        if same_term(p.term, signals.term):
+            p.pinned = True
+            out.append(p)
+    return out[:2]
 
 
 # ----------------------------------------------------------------- generation
@@ -423,7 +497,8 @@ def prepare(services: Services, question: str, scope: Scope,
     """Retrieve and apply the threshold. Returns (passages, early_response_if_not_found). May raise SearchError."""
     passages = retrieve(services, question, scope, trace)
     best = max((p.score for p in passages), default=None)
-    if best is None or best < services.settings.score_threshold:
+    pinned = any(p.pinned for p in passages)  # a definition of the asked term always goes to the model
+    if not pinned and (best is None or best < services.settings.score_threshold):
         return passages, not_found(scope, best)
     expand_neighbours(services, question, passages)
     return passages, None

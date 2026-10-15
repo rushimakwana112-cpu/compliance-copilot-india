@@ -253,3 +253,34 @@ def test_retrieval_fetches_top_k_and_keeps_keep_k(services, store):
     services.settings.top_k, services.settings.keep_k = 12, 5
     passages = rag.retrieve(services, "gratuity fixed term employee", Scope(["gujarat"], "default"))
     assert asked == [12] and len(passages) == 5
+
+
+# ----------------------------------------------------------------- defined terms are pinned
+@pytest.mark.parametrize("a, b, same", [
+    ("fixed term employee", "fixed term employment", True),
+    ("Fixed-Term Employees", "“fixed term employment”", True),
+    ("principal employer", "principal employment", True),
+    ("wages", "Wage", True),
+    ("employee", "employment", False),  # only inside a compound
+    ("worker", "wages", False),
+])
+def test_term_normalisation(a, b, same):
+    assert rag.same_term(a, b) is same
+
+
+def test_definition_chunk_is_sent_even_below_threshold(services, store, llm):
+    store.add("Code on Social Security, 2020, Section 2 (Definitions) — fixed term employment: (34) engagement "
+              "of an employee on the basis of a written contract for a fixed period", doc="Code on Social Security, 2020",
+              section="Section 2 · Definitions", page=4, term="fixed term employment",
+              scope="central", status="current", doc_type="act")
+    store.add("Professional tax slab table", doc="Gujarat PT schedule", page=1, scope="gujarat",
+              status="current", doc_type="notification")
+    services.settings.score_threshold = 0.99  # nothing passes on score alone
+    llm.responder = lambda m, j: "A fixed term employee is engaged on a written contract for a fixed period [1]."
+    resp, passages = rag.answer(services, "What is a fixed term employee?", Scope(["gujarat"], "default"))
+    assert resp.type == "rag" and passages[0].pinned and passages[0].term == "fixed term employment"
+    assert "written contract for a fixed period" in llm.calls[-1][1]["content"]
+
+
+def test_coverage_question_is_not_a_term(services):
+    assert rag.Signals.of("Who is covered for gratuity under the SS Code?").term == ""
