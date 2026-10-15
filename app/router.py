@@ -20,7 +20,11 @@ CALC_INTENT = re.compile(
     r"\b(calculate|calculation|compute|how much|work out|estimate|break-?up|split|deduction for|contribution (?:for|on))\b",
     re.IGNORECASE,
 )
-CALC_TOPIC = re.compile(r"\b(pf|epf|provident fund|esic|esi|professional tax|pt|gratuity)\b", re.IGNORECASE)
+CALC_TOPIC = re.compile(r"\b(pf|epf|eps|edli|provident fund|esic|esi|professional tax|pt|gratuity)\b", re.IGNORECASE)
+# "Is ESIC applicable on 24,000 gross?" asks what the law says, even though it has a topic and an amount.
+LAW_ASK = re.compile(r"^\s*(?:is|are|does|do|can|could|will|should|must|who|when|why)\b"
+                     r"|\b(?:applicable|apply|applies|eligible|eligibility|covered|coverage|mandatory|compulsory)\b",
+                     re.IGNORECASE)
 # "employees" alone is not enough ("Is ESIC applicable to employees earning 24,000?" is a law question).
 DATA_NOUN = re.compile(
     r"\b(sample (?:data|employees?|staff|payroll)|our (?:staff|employees?|team|workforce)|"
@@ -39,8 +43,8 @@ def route_rules(question: str) -> Path_:
     """Keyword/regex router. Due-date questions ("When is PF due?") go to the tools too."""
     if is_deadline_question(question):
         return "tool"
-    if CALC_INTENT.search(question) and CALC_TOPIC.search(question) and has_amount(question):
-        return "tool"
+    if CALC_TOPIC.search(question) and has_amount(question) and (CALC_INTENT.search(question) or not LAW_ASK.search(question)):
+        return "tool"  # "what is my pf if basic is 24000", "esic on 20000 salary", "pf for 24000 basic"
     if DATA_NOUN.search(question) and QUERY_VERB.search(question):
         return "sql"
     return "rag"

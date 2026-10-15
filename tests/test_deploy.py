@@ -44,7 +44,7 @@ def test_render_blueprint_matches_the_deploy_plan():
     assert svc["runtime"] == "python" and svc["plan"] == "free"
     assert svc["buildCommand"] == "pip install -r requirements.txt"
     assert svc["startCommand"] == "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
-    assert svc["healthCheckPath"] == "/api/health"
+    assert svc["healthCheckPath"] == "/healthz"
     values = {e["key"]: e.get("value") for e in svc["envVars"]}
     assert values["LLM_PROVIDER"] == "groq" and values["EMBED_PROVIDER"] == "pinecone"
     assert values["PUBLIC_MODE"] == "true" and values["SCORE_THRESHOLD"] == "0.38"
@@ -89,7 +89,7 @@ def test_publish_readiness():
 
     svc = yaml.safe_load((ROOT / "render.yaml").read_text())["services"][0]
     env = {e["key"]: e for e in svc["envVars"]}
-    assert env["PUBLIC_MODE"]["value"] == "true" and svc["healthCheckPath"] == "/api/health"
+    assert env["PUBLIC_MODE"]["value"] == "true" and svc["healthCheckPath"] == "/healthz"
     s = Settings(_env_file=None)
     assert s.rate_limit_per_min > 0 and s.rate_limit_per_day > 0 and s.cache_size > 0
     ignored = [ln.strip() for ln in (ROOT / ".gitignore").read_text().splitlines()]
@@ -98,6 +98,9 @@ def test_publish_readiness():
     assert ".env" not in tracked and ".env.example" in tracked
     html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     assert "Waking up the server" in html and 'fetch(API_BASE + "/api/health"' in html
+    # the sidebar must not claim a model before /api/health answers (it showed "Ollama" on the live site)
+    assert '<dd id="kvModel">Checking…</dd>' in html and '<dd id="kvEmbed">Checking…</dd>' in html
+    assert '$("kvModel").textContent = $("kvEmbed").textContent = "Offline (demo)"' in html
 
 
 def test_readme_eval_table_is_rewritten_from_the_report(services, store, llm, tmp_path):

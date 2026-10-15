@@ -161,6 +161,8 @@ class CTC:
 
 def is_ctc_question(text: str) -> bool:
     """'My CTC is 6 LPA, in-hand?' or 'salary 25k in-hand?' (an amount plus in-hand)."""
+    if PAID_DAYS.search(text):  # "salary for 20 days…" is a per-day calculation
+        return False
     if CTC_INTENT.search(text):
         return bool(INHAND_INTENT.search(text) or re.search(r"\bsalary\b|\bmonthly\b", text, re.I))
     return bool(INHAND_INTENT.search(text) and amounts(text))
@@ -496,13 +498,19 @@ DIVISOR_Q = ("How does your company work out per-day pay: monthly salary ÷ 26 d
              "of that month? It's company policy (see your appointment letter or ask HR).")
 
 
+# "salary for 20 days if monthly salary 31000", "I worked 18 days this month, salary 27000"
+PAID_DAYS = re.compile(r"\b(?:salary|pay)\s+for\s+(\d{1,2})\s+days?\b|\bworked\s+(?:for\s+)?(?:only\s+)?(\d{1,2})\s+days?\b", re.I)
+
+
 def is_day_question(text: str) -> bool:
-    return bool(PER_DAY.search(text) or LOP.search(text) or JOINING.search(text) or LEAVING.search(text))
+    return bool(PER_DAY.search(text) or LOP.search(text) or JOINING.search(text) or LEAVING.search(text)
+                or PAID_DAYS.search(text))
 
 
 def day_calc(text: str, today: date | None = None) -> ChatResponse:
     today = today or date.today()
-    kind = "lop" if LOP.search(text) else "join" if JOINING.search(text) else "leave" if LEAVING.search(text) else "per_day"
+    kind = ("lop" if LOP.search(text) else "join" if JOINING.search(text) else "leave" if LEAVING.search(text)
+            else "paid_days" if PAID_DAYS.search(text) else "per_day")
     money = amounts(text)
     method = days_method(text)
     when = month_in(text, today)
@@ -523,6 +531,12 @@ def day_calc(text: str, today: date | None = None) -> ChatResponse:
         leave_days = float(next(g for g in m.groups() if g)) if m else None
         if leave_days is None:
             asks.append("How many days of unpaid leave?")
+    paid_days = None
+    if kind == "paid_days":
+        m = PAID_DAYS.search(text)
+        paid_days = int(next(g for g in m.groups() if g))  # type: ignore[union-attr]
+        if not 1 <= paid_days <= 31:
+            return _guide_invalid("A month has at most 31 days.")
     if method == "calendar" and kind != "per_day" and when is None:
         asks.append("Which month (so I know whether it has 28, 29, 30 or 31 days)?")
     if method == "calendar" and kind == "per_day" and when is None:
@@ -541,6 +555,13 @@ def day_calc(text: str, today: date | None = None) -> ChatResponse:
         cut = per_day * leave_days
         rows += [["Deduction", f"{inr(per_day)} × {leave_days:g} days", inr(cut)], ["Salary after deduction", "", inr(salary - cut)]]
         answer = f"{leave_days:g} days of unpaid leave: **{inr(cut)}** deducted, so the month's salary is **{inr(salary - cut)}**."
+    elif kind == "paid_days":
+        assert paid_days is not None
+        if paid_days > divisor:
+            return _guide_invalid(f"{paid_days} paid days is more than the {divisor}-day basis.")
+        pay = per_day * paid_days
+        rows += [["Salary for the days", f"{inr(per_day)} × {paid_days} days", inr(pay)]]
+        answer = f"Salary for {paid_days} paid days: **{inr(pay)}** ({basis}, × {paid_days})."
     else:
         assert day is not None
         month_days = calendar.monthrange(*when)[1] if when else None

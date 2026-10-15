@@ -187,8 +187,8 @@ Click **Deploy to Render** at the top. [DEPLOY.md](DEPLOY.md) has the steps. The
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/health` | `{status, model, provider, embed_provider, llm_ok, pinecone, docs, public_mode, issues[]}`. Checks the Groq key with a free models-list call (cached a minute). Render's health check. Always HTTP 200 |
-| `GET /healthz` | `{ok: true}` with no outside calls |
+| `GET /api/health` | `{status, model, provider, embed_provider, llm_ok, pinecone, docs, public_mode, issues[]}`. Checks the Groq key with a free models-list call (cached a minute, 5 s timeout, no retries). Used by the page's status pill. Always HTTP 200 |
+| `GET /healthz` | `{ok: true}` with no outside calls. Render's health check |
 | `GET /api/documents` | `[{name, scope, status, meta}]`: from `data/manifest.json`, or from `data/sources.csv` when there is no manifest (as on Render) |
 | `GET /api/states` | `[{id, name, aliases[]}]` |
 | `POST /api/chat` | `{message (≤ 1,000 chars), history[] (last 4 turns used), jurisdiction}` → `{type: rag\|tool\|guide\|sql\|not_found\|error, answer, scope, citations[], table?, tool?, sql?, rows_scanned?, note?, latency_ms, cached?, quota_exceeded?}`. In public mode, 429 with the same shape when the IP is over its limit |

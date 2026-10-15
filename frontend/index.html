@@ -478,8 +478,8 @@ pre.code {
       <section style="margin-top:auto">
         <h2 class="section-title">Pipeline</h2>
         <dl class="kv">
-          <dt>LLM</dt><dd id="kvModel">Ollama · qwen2.5:7b</dd>
-          <dt>Embeddings</dt><dd id="kvEmbed">bge-m3</dd>
+          <dt>LLM</dt><dd id="kvModel">Checking…</dd>
+          <dt>Embeddings</dt><dd id="kvEmbed">Checking…</dd>
           <dt>Vector DB</dt><dd>Pinecone</dd>
           <dt>Data</dt><dd>rates.yaml + your figures</dd>
           <dt>Mode</dt><dd id="modeLabel">demo</dd>
@@ -599,6 +599,7 @@ const ui = {
   answers: {},                                // id -> answer payload
   activeId: null,
   busy: false,
+  chat: 0,                                    // bumped by New chat, so a stopped request can't write into the new one
   controller: null                            // AbortController of the running request
 };
 
@@ -909,7 +910,7 @@ function stopGenerating() { if (ui.controller) ui.controller.abort(); }
 async function ask(text) {
   text = (text || "").trim();
   if (!text || ui.busy) return;
-  const scope = resolveScope(text);
+  const scope = resolveScope(text), chat = ui.chat;
   addUser(text);
   $("input").value = ""; autoGrow(); renderScopeLine();
   ui.controller = new AbortController();
@@ -942,6 +943,7 @@ async function ask(text) {
     }
   }
   removePending();
+  if (chat !== ui.chat) { ui.controller = null; setBusy(false); return; }   // New chat was clicked meanwhile
   answer.scope = answer.scope || { state: scope.state, states: scope.states, how: scope.how };
   answer.question = text;
   addBot(answer);
@@ -1223,6 +1225,7 @@ $("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shif
 $("composer").onsubmit = (e) => { e.preventDefault(); if (ui.busy) stopGenerating(); else ask($("input").value); };
 $("newChat").onclick = () => {
   stopGenerating();
+  ui.chat++;
   ui.history = []; ui.transcript = []; ui.answers = {}; ui.activeId = null; renderWelcome();
   $("srcList").innerHTML = '<div class="src-empty">No answer selected yet.</div>';
   $("srcFor").textContent = "Select an answer to see the passages it used.";
@@ -1280,6 +1283,7 @@ async function checkHealth() {
     $("statusText").textContent = "Demo mode";
     $("statusPill").title = "Backend offline: answers are demo placeholders";
     $("modeLabel").textContent = "demo";
+    $("kvModel").textContent = $("kvEmbed").textContent = "Offline (demo)";
   }
   renderScopeLine();
 }

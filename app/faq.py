@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from app import tools
+from app import router, tools
 from app.config import DATA_DIR
 from app.salary import FOOTER, _fy
 from app.schemas import ChatResponse, Citation
@@ -35,7 +35,7 @@ def load(path: Path = FAQ_PATH) -> list[dict[str, Any]]:
 
 def match(text: str, entries: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
     """The first entry whose pattern matches, unless the message asks to calculate something with an amount."""
-    if AMOUNT.search(text) and CALC.search(text):
+    if AMOUNT.search(text) and (CALC.search(text) or router.route_rules(text) == "tool"):
         return None
     return next((e for e in (entries or load()) if any(p.search(text) for p in e["_patterns"])), None)
 
