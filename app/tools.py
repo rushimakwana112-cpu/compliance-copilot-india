@@ -21,6 +21,7 @@ from typing import Any
 
 import yaml
 
+from app import deadlines
 from app.config import DATA_DIR
 from app.jurisdiction import Scope, load_states
 from app.schemas import ChatResponse, Citation, Table
@@ -118,7 +119,7 @@ def rate(rates: dict[str, Any], key: str, on: date | None = None) -> Rate:
 def resolved(rates: dict[str, Any], on: date | None = None) -> dict[str, Any]:
     """Every figure as it applies on `on`, for GET /api/rates. Null values are listed, not hidden."""
     on = on or date.today()
-    out: dict[str, Any] = {"date": on.isoformat(), "rates": {}, "professional_tax": {}}
+    out: dict[str, Any] = {"date": on.isoformat(), "rates": {}, "professional_tax": {}, "due_dates": {}}
     for group in ("pf", "esic", "gratuity"):
         for name, node in (rates.get(group) or {}).items():
             v = pick(node, on)
@@ -131,6 +132,16 @@ def resolved(rates: dict[str, Any], on: date | None = None) -> dict[str, Any]:
         v = pick(node, on) or {}
         out["professional_tax"][state] = {
             "slabs": v.get("slabs") or [],
+            **{k: (None if (x := v.get(k)) in (None, "") else str(x))
+               for k in ("effective_from", "effective_to", "source_doc", "section", "status", "url")},
+        }
+    due = rates.get("due_dates") or {}
+    flat = {**{k: n for k, n in due.items() if k != "professional_tax"},
+            **{f"professional_tax.{st}": n for st, n in (due.get("professional_tax") or {}).items()}}
+    for name, node in flat.items():
+        v = pick(node, on) or {}
+        out["due_dates"][name] = {
+            "value": v.get("value"), "month_offset": v.get("month_offset"), "note": v.get("note"),
             **{k: (None if (x := v.get(k)) in (None, "") else str(x))
                for k in ("effective_from", "effective_to", "source_doc", "section", "status", "url")},
         }
@@ -230,7 +241,8 @@ def professional_tax(state: str, monthly_salary: float, rates: dict[str, Any] | 
         if lo is None or tax is None:
             raise RateMissing(f"professional_tax.{state}.slabs", src.source_doc)
         if monthly_salary >= lo and (hi is None or monthly_salary <= hi):
-            band = f"{inr(lo)} – {inr(hi)}" if hi is not None else f"{inr(lo)} and above"
+            low = f"above {inr(math.floor(lo))}" if lo != int(lo) else f"{inr(lo)} and above"  # 12000.01 = above 12,000
+            band = f"{inr(lo)} – {inr(hi)}" if hi is not None else low
             name = next((s.name for s in load_states() if s.id == state), state)
             return ChatResponse(
                 type="tool", tool=f"professional_tax(state={state!r}, monthly_salary={monthly_salary:g})",
@@ -245,7 +257,11 @@ def gratuity_estimate(last_basic_da: float, years: float, employment_type: str =
                       rates: dict[str, Any] | None = None, on: date | None = None) -> ChatResponse:
     """Gratuity = last (basic + DA) × days_per_year / wage_days_divisor × counted years, capped at max_amount."""
     r = rates or load_rates()
-    days, divisor, cap = (rate(r, f"gratuity.{k}", on) for k in ("days_per_year", "wage_days_divisor", "max_amount"))
+    days, divisor = (rate(r, f"gratuity.{k}", on) for k in ("days_per_year", "wage_days_divisor"))
+    try:
+        cap: Rate | None = rate(r, "gratuity.max_amount", on)
+    except RateMissing:
+        cap = None  # the ceiling is notified separately; without it the amount is shown uncapped, and says so
     fixed = employment_type.lower().startswith("fixed")
     min_years = rate(r, "gratuity.min_years_fixed_term" if fixed else "gratuity.min_years_permanent", on)
     completed = math.floor(years)
@@ -264,14 +280,16 @@ def gratuity_estimate(last_basic_da: float, years: float, employment_type: str =
             f"{years:g} given. (Death or disablement are exceptions; see the cited section.)",
         )
     amount = last_basic_da * days.value / divisor.value * completed
-    capped = min(amount, cap.value)
+    capped = min(amount, cap.value) if cap else amount
     rows = [
         ["Last basic + DA", "per month", inr(last_basic_da)],
         ["Counted years", f"{years:g} given" + (f", >{round_after.value:g} months rounds up" if round_after else ""), str(completed)],
         ["Formula", f"wage × {days.value:g} / {divisor.value:g} × years", inr(amount)],
     ]
-    if capped < amount:
+    if cap and capped < amount:
         rows.append(["Ceiling applied", f"max {inr(cap.value)}", inr(capped)])
+    elif not cap:
+        rows.append(["Ceiling", "not configured in data/rates.yaml: amount not capped", "check"])
     rows.append(["Gratuity payable", "", inr(capped)])
     return ChatResponse(
         type="tool", tool=tool, answer=f"Estimated gratuity for {completed} counted year(s) at {inr(last_basic_da)} last basic + DA:",
@@ -281,6 +299,7 @@ def gratuity_estimate(last_basic_da: float, years: float, employment_type: str =
 
 
 # ----------------------------------------------------------------- parsing the question
+CALC_WORDS = re.compile(r"\b(calculate|compute|how much|work out|estimate)\b", re.IGNORECASE)
 MONEY = re.compile(r"(?:₹|\brs\.?|\binr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(k\b|lakhs?\b|lacs?\b|l\b)?", re.IGNORECASE)
 YEARS = re.compile(r"(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b", re.IGNORECASE)
 MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
@@ -330,6 +349,8 @@ def run(question: str, scope: Scope, rates: dict[str, Any] | None = None, today:
     q = question.lower()
     on, rest = question_date(question)
     on = on or today or date.today()
+    if deadlines.is_deadline_question(question) and not CALC_WORDS.search(question):
+        return deadlines.run(question, scope, rates or load_rates(), on)
     amounts = parse_amounts(rest)
     if not amounts:
         return ChatResponse(type="tool", answer="Please include the monthly amount, e.g. \"Calculate PF for basic ₹18,000\".")

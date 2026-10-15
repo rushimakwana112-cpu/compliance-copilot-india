@@ -24,7 +24,7 @@ A portfolio project by **Cyber Panther**, built as a Learnbay assignment. India'
 ## How it works
 
 1. **Jurisdiction.** Central law is always searched; a state or city in the question (for example "Ahmedabad") adds that state's rules.
-2. **Routing.** A calculation ("PF for basic ₹20,000") goes to a Python calculator, a question about the synthetic sample employees goes to a guarded text-to-SQL agent, and everything else goes to retrieval.
+2. **Routing.** A calculation ("PF for basic ₹20,000") or a due date ("When is TDS on salary due?") goes to Python code that reads `data/rates.yaml`, a question about the synthetic sample employees goes to a guarded text-to-SQL agent, and everything else goes to retrieval.
 3. **Retrieval.** Pinecone searches the indexed documents (hosted `llama-text-embed-v2` embeddings), filtered to current law and the right scope. Low scores end in "not found" without calling the model.
 4. **Answer.** Groq's language model writes the answer from the numbered passages only and cites them; the page shows each citation with the document, section and page.
 
@@ -72,7 +72,7 @@ The Industrial Relations Code and the Occupational Safety, Health and Working Co
 
 ## Evaluation
 
-`eval/questions.csv` has 33 questions: 19 retrieval questions (5 of them follow-ups), 5 calculator, 4 SQL and 5 trick questions that must be refused. Questions whose documents are not indexed yet are skipped and left out of the metrics. Full per-question results: [`eval/report.md`](eval/report.md).
+`eval/questions.csv` has 35 questions: 18 retrieval questions (5 of them follow-ups), 5 calculator, 3 due-date, 4 SQL and 5 trick questions that must be refused. Questions whose documents are not indexed yet are skipped and left out of the metrics. Full per-question results: [`eval/report.md`](eval/report.md).
 
 <!-- eval-results:start (scripts/run_all.ps1 rewrites this block from eval/report.md) -->
 | Metric | Value |

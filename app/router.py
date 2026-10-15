@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
+from app.deadlines import is_deadline_question
 from app.llm import LLM, LLMError, parse_json
 
 Path_ = Literal["tool", "sql", "rag"]
@@ -35,7 +36,9 @@ def has_amount(text: str) -> bool:
 
 
 def route_rules(question: str) -> Path_:
-    """Keyword/regex router."""
+    """Keyword/regex router. Due-date questions ("When is PF due?") go to the tools too."""
+    if is_deadline_question(question):
+        return "tool"
     if CALC_INTENT.search(question) and CALC_TOPIC.search(question) and has_amount(question):
         return "tool"
     if DATA_NOUN.search(question) and QUERY_VERB.search(question):
@@ -44,7 +47,8 @@ def route_rules(question: str) -> Path_:
 
 
 ROUTER_PROMPT = """Classify the user's question about Indian payroll law into exactly one route.
-- "tool": asks to calculate PF, ESIC, professional tax or gratuity for a given amount.
+- "tool": asks to calculate PF, ESIC, professional tax or gratuity for a given amount, or asks for a due date
+  (PF, ESIC, TDS, professional tax payment or return dates).
 - "sql": asks about the company's sample employee data (list, count, which employees).
 - "rag": anything else, including questions about what the law says.
 Reply as JSON: {"route": "tool" | "sql" | "rag"}"""

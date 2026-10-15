@@ -8,25 +8,26 @@ In PowerShell, in the project folder:
 ```powershell
 .\scripts\run_all.ps1
 ```
-Expected: a green `OK:` line after each step and `All done.` at the end. It switches to the deployed default branch (`main`), pulls, installs, runs the tests (`252 passed`), re-indexes Pinecone, runs the eval, writes the numbers into the README table, commits and pushes.
+Expected: a green `OK:` line after each step and `All done.` at the end. It switches to the deployed default branch (`main`), pulls, installs, runs the tests (`270 passed`), re-indexes Pinecone, runs the eval, writes the numbers into the README table, commits and pushes.
 If it stops, the red `STOPPED at:` line names the step and what to check. If Windows says scripts are disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once and try again.
 
-## 2. Check the null and flagged rates in `data/rates.yaml`
+## 2. Confirm the rates marked "check" in `data/rates.yaml`
 
-No official PDF was reachable from the build machine, so nothing was filled from a document. Please fill these from the official text (value, `effective_from`, page in `section`, `url`), then run the script again:
+The calculators and due dates now work with figures taken from official documents (each one is cited in the answer). The ones below were read from a copy of the Gazette text because the official site blocked the build machine. Open the official PDF, confirm the figure and the para, then delete ` - check` from its `source_doc` and add the `url`:
 
-| Field | Status | Take it from |
+| Field | Value used | Confirm in |
 |---|---|---|
-| `pf.wage_ceiling` 25000 (current) | **check**: `effective_from` and page are null | Gazette notification of 17 Sept 2026 |
-| `pf.wage_ceiling` 15000 (historical) | **check**: `effective_to` and the para are null; source marked "check" | EPF Scheme, 1952 |
-| `pf.employee_rate`, `pf.employer_rate` | null | EPF Scheme, 2026 |
-| `pf.eps_rate`, `pf.eps_wage_cap` | null | EPS, 2026 |
-| `pf.edli_rate` | null | EDLI Scheme, 2026 |
-| `esic.wage_ceiling`, `esic.employee_rate`, `esic.employer_rate` | null | ESIC notifications |
-| `gratuity.days_per_year`, `wage_days_divisor`, `min_years_permanent`, `min_years_fixed_term`, `round_up_after_months`, `max_amount` | null | Code on Social Security, 2020 (gratuity section); gratuity ceiling notification |
-| `professional_tax.gujarat` and `.maharashtra` slabs | null | each state's Professional Tax schedule |
+| `pf.employee_rate`, `pf.employer_rate` | 0.12 each | EPF Scheme, 2026 (G.S.R. 525(E)) para 18(2), and S.O. 3582(E) of 1 July 2026 (some establishments: 10%) |
+| `pf.eps_rate` | 0.0833 | S.O. 3580(E) of 1 July 2026 (egazette ID 274111) |
+| `pf.eps_wage_cap` | 25000 from 17 Sept 2026 | EPS, 2026 (G.S.R. 527(E)) paras 4(1), 11(3) |
+| `pf.edli_rate` | 0.005 | S.O. 3581(E) of 1 July 2026 (egazette ID 274104) |
+| `pf.wage_ceiling` 15000 (historical) | until 16 Sept 2026 | the earlier ceiling (S.O. 2702(E) of 29 May 2026 may have changed it) |
+| `gratuity.wage_days_divisor`, `round_up_after_months` | 26, 6 | Code on Social Security, 2020 s.53 (Explanation and s.53(2)) |
+| `due_dates.pf` | 15th of next month | EPF Scheme, 2026 paras 20(1), 29(2) |
 
-To index those documents too, paste their links into the commented rows at the bottom of `data/sources.csv` (remove the `# `); the script picks them up. Check the result at http://localhost:8000/api/rates after `uvicorn app.main:app --reload`: filled fields show their value and source, the rest `null`.
+**Still empty (answers say "not configured"):** `gratuity.max_amount` (no ceiling notified under s.53(3) yet; the gratuity calculator shows the amount uncapped and says so), Maharashtra Professional Tax slabs and due date (separate slabs for women and a February rule; check mahagst.gov.in).
+
+Check the result at http://localhost:8000/api/rates after `uvicorn app.main:app --reload`, or on the live site at `/api/rates`.
 
 ## 3. Deploy: click the button and paste 2 keys
 

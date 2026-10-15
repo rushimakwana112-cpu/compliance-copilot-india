@@ -15,70 +15,134 @@
 # When several versions are valid (dates not filled in yet), the `current` one wins.
 # A null value makes the calculator answer "Rate not configured: <field>" instead of guessing.
 # Everything still null, or marked "check", is listed in NEXT_STEPS_FOR_RUSHI.md.
+# "check" = the figure was read from a copy of the official Gazette text, not on the official host;
+# open the official PDF and confirm it, then remove " - check".
 
 pf:
-  # Wage ceiling for EPF contributions.
+  # Wage ceiling for EPF contributions (Code on Social Security s.2(89), for Chapter III).
   wage_ceiling:
-    - {value: 15000, effective_from: null, effective_to: null, status: historical,
+    - {value: 15000, effective_from: null, effective_to: 2026-09-16, status: historical,
        source_doc: "EPF Scheme, 1952 (wage ceiling before the 2026 notification) - check", section: "", url: ""}
-    - {value: 25000, effective_from: null, effective_to: null, status: current,
-       source_doc: "Gazette notification 17 Sept 2026", section: "",
+    - {value: 25000, effective_from: 2026-09-17, effective_to: null, status: current,
+       source_doc: "MoLE notification S.O. 5109(E), 17 Sept 2026", section: "Code on Social Security s.2(89)",
        url: "https://www.labour.gov.in/static/uploads/2026/09/2b0f1dbbd3769fc388416186ec145328.pdf"}
   employee_rate:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "EPF Scheme, 2026", section: "", url: ""}
+    - {value: 0.12, effective_from: 2026-06-29, effective_to: null, status: current,
+       source_doc: "EPF Scheme, 2026 (G.S.R. 525(E)); S.O. 3582(E), 1 July 2026 - check", section: "para 18(2)", url: ""}
   employer_rate:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "EPF Scheme, 2026", section: "", url: ""}
+    - {value: 0.12, effective_from: 2026-06-29, effective_to: null, status: current,
+       source_doc: "EPF Scheme, 2026 (G.S.R. 525(E)); S.O. 3582(E), 1 July 2026 - check", section: "para 18(2)", url: ""}
   eps_rate:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "EPS, 2026", section: "", url: ""}
-  # Pensionable wage cap for the EPS share.
+    - {value: 0.0833, effective_from: 2026-06-29, effective_to: null, status: current,
+       source_doc: "S.O. 3580(E), 1 July 2026 (EPS contribution) - check", section: "Code on Social Security s.16(1)(b)",
+       url: ""}
+  # Pensionable wage cap for the EPS share: the notified wage ceiling (EPS, 2026 paras 4(1), 11(3)).
   eps_wage_cap:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "EPS, 2026", section: "", url: ""}
+    - {value: 25000, effective_from: 2026-09-17, effective_to: null, status: current,
+       source_doc: "EPS, 2026 (G.S.R. 527(E)) with S.O. 5109(E) - check", section: "paras 4(1), 11(3)", url: ""}
   edli_rate:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "EDLI Scheme, 2026", section: "", url: ""}
+    - {value: 0.005, effective_from: 2026-06-29, effective_to: null, status: current,
+       source_doc: "S.O. 3581(E), 1 July 2026 (EDLI contribution) - check", section: "Code on Social Security s.16(1)(c)",
+       url: ""}
 
 esic:
   wage_ceiling:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "ESIC wage-ceiling notification", section: "", url: ""}
+    - {value: 21000, effective_from: 2017-01-01, effective_to: null, status: current,
+       source_doc: "ESIC: Coverage", section: "", url: "https://esic.gov.in/coverage"}
   employee_rate:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "ESIC contribution-rate notification", section: "", url: ""}
+    - {value: 0.0075, effective_from: 2019-07-01, effective_to: null, status: current,
+       source_doc: "ESIC: Contribution", section: "", url: "https://esic.gov.in/contribution"}
   employer_rate:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "ESIC contribution-rate notification", section: "", url: ""}
+    - {value: 0.0325, effective_from: 2019-07-01, effective_to: null, status: current,
+       source_doc: "ESIC: Contribution", section: "", url: "https://esic.gov.in/contribution"}
 
 gratuity:
   days_per_year:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Code on Social Security, 2020 (gratuity section)", section: "", url: ""}
+    - {value: 15, effective_from: 2025-11-21, effective_to: null, status: current,
+       source_doc: "MoLE Compliance Handbook for Employers under the Four Labour Codes (Feb 2026)",
+       section: "Code on Social Security s.53(2)",
+       url: "https://www.labour.gov.in/static/uploads/2026/02/83978455025732b99b0165def80ab171.pdf"}
   wage_days_divisor:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Code on Social Security, 2020 (gratuity section)", section: "", url: ""}
+    - {value: 26, effective_from: 2025-11-21, effective_to: null, status: current,
+       source_doc: "Code on Social Security, 2020 - check", section: "s.53, Explanation", url: ""}
   min_years_permanent:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Code on Social Security, 2020 (gratuity section)", section: "", url: ""}
+    - {value: 5, effective_from: 2025-11-21, effective_to: null, status: current,
+       source_doc: "MoLE Compliance Handbook for Employers under the Four Labour Codes (Feb 2026)",
+       section: "Code on Social Security s.53(1)",
+       url: "https://www.labour.gov.in/static/uploads/2026/02/83978455025732b99b0165def80ab171.pdf"}
   min_years_fixed_term:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Code on Social Security, 2020 (gratuity section)", section: "", url: ""}
+    - {value: 1, effective_from: 2025-11-21, effective_to: null, status: current,
+       source_doc: "MoLE Compliance Handbook for Employers under the Four Labour Codes (Feb 2026)",
+       section: "Code on Social Security s.53(1)",
+       url: "https://www.labour.gov.in/static/uploads/2026/02/83978455025732b99b0165def80ab171.pdf"}
   # Months in the final year after which it counts as a full year (null = only completed years count).
   round_up_after_months:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Code on Social Security, 2020 (gratuity section)", section: "", url: ""}
+    - {value: 6, effective_from: 2025-11-21, effective_to: null, status: current,
+       source_doc: "Code on Social Security, 2020 - check", section: "s.53(2)", url: ""}
+  # Notified by the Central Government under s.53(3). No notification under the Code found yet.
   max_amount:
-    - {value: null, effective_from: null, effective_to: null, status: current, source_doc: "Gratuity ceiling notification", section: "", url: ""}
+    - {value: null, effective_from: null, effective_to: null, status: current,
+       source_doc: "Gratuity ceiling notification under Code on Social Security s.53(3)", section: "", url: ""}
 
 # Professional Tax is a state levy. One list of dated versions per state id from data/states.yaml.
 # Slabs are monthly salary ranges: `from` inclusive, `to` inclusive (null `to` = and above).
 professional_tax:
   gujarat:
-    - effective_from: null
+    - effective_from: 2022-04-01
       effective_to: null
       status: current
-      source_doc: "Gujarat Professional Tax schedule"
-      section: ""
-      url: ""
+      source_doc: "Rate of Profession Tax, Gujarat State Tax on Professions, Trades, Callings and Employments Act, 1976"
+      section: "Schedule, entry 1"
+      url: "https://commercialtax.gujarat.gov.in/vatwebsite/download/schedule/Rate_of_Profession_Tax.pdf"
       slabs:
-        - {from: null, to: null, monthly_tax: null}
-        - {from: null, to: null, monthly_tax: null}
+        - {from: 0, to: 12000, monthly_tax: 0}
+        - {from: 12000.01, to: null, monthly_tax: 200}
+  # Maharashtra has separate slabs for women and a higher February deduction, which these simple
+  # monthly slabs can't express yet; left empty until confirmed on mahagst.gov.in.
   maharashtra:
     - effective_from: null
       effective_to: null
       status: current
-      source_doc: "Maharashtra Professional Tax schedule"
+      source_doc: "Maharashtra State Tax on Professions, Trades, Callings and Employments Act, 1975, Schedule I"
       section: ""
       url: ""
       slabs:
         - {from: null, to: null, monthly_tax: null}
         - {from: null, to: null, monthly_tax: null}
+
+# Due dates, answered by app/deadlines.py ("When is PF due?").
+#   value: a day of the month after the wage month (with month_offset: 1), or
+#          a map of label -> "MM-DD" (quarterly statements), or one "MM-DD" (yearly).
+#   note:  shown with the answer (exceptions, who it applies to).
+due_dates:
+  pf:
+    - {value: 15, month_offset: 1, effective_from: 2026-06-29, effective_to: null, status: current,
+       source_doc: "EPF Scheme, 2026 (G.S.R. 525(E)) - check", section: "paras 20(1), 29(2)", url: "",
+       note: "Contributions and the ECR (electronic challan-cum-return) for a wage month are due within 15 days after it ends."}
+  esic:
+    - {value: 15, month_offset: 1, effective_from: null, effective_to: null, status: current,
+       source_doc: "ESIC: Contribution", section: "", url: "https://esic.gov.in/contribution",
+       note: "Due within 15 days of the last day of the calendar month."}
+  tds_salary_deposit:
+    - {value: 7, month_offset: 1, effective_from: 2026-04-01, effective_to: null, status: current,
+       source_doc: "Income-tax Rules, 2026", section: "rule 218(2)", url: "https://www.incometaxindia.gov.in/w/rule-218-1",
+       note: "Tax deducted in March is due by 30 April. Government offices paying without a challan deposit it the same day."}
+  tds_quarterly_statement:
+    - {value: {"Q1 (Apr-Jun)": "07-31", "Q2 (Jul-Sep)": "10-31", "Q3 (Oct-Dec)": "01-31", "Q4 (Jan-Mar)": "05-31"},
+       effective_from: 2026-04-01, effective_to: null, status: current,
+       source_doc: "Income-tax Rules, 2026 (Form 138, formerly Form 24Q)", section: "rule 219(4)",
+       url: "https://www.incometaxindia.gov.in/w/rule-219-1"}
+  form16:
+    - {value: "06-15", effective_from: 2026-04-01, effective_to: null, status: current,
+       source_doc: "Income-tax Rules, 2026 (Form 130, formerly Form 16)", section: "rule 215(1)",
+       url: "https://www.incometaxindia.gov.in/w/rule-215-1",
+       note: "Form 130 (formerly Form 16) is issued to employees by 15 June after the end of the tax year."}
+  professional_tax:
+    gujarat:
+      - {value: 15, month_offset: 1, effective_from: null, effective_to: null, status: current,
+         source_doc: "Surat Municipal Corporation: Profession Tax FAQ", section: "FAQ 20-21",
+         url: "https://www.suratmunicipal.gov.in/FAQs/ProfessionTax",
+         note: "Employers with 20 or more employees pay monthly, within 15 days after the month ends; with fewer than 20, within 15 days after each quarter."}
+    maharashtra:
+      - {value: null, effective_from: null, effective_to: null, status: current,
+         source_doc: "Maharashtra Profession Tax Act, 1975 and Rules", section: "", url: ""}

@@ -187,3 +187,12 @@ A new test (`tests/test_deploy.py`) fails if a legal-looking number (PF/EPS/ESIC
 - *The server doesn't have your PC's files.* `data/manifest.json` is written by ingestion on your PC and is not committed, so code running on the server must cope without it.
 - *CI (continuous integration)* means a GitHub server runs your tests on every push. A red cross on a commit tells you something broke before anyone deploys it. The tests need no keys because Groq and Pinecone are faked.
 - *Merge resolution rules are about conflicts.* When merging, a file can change on only one side (no conflict): git takes that side automatically. Overriding it just because "my branch wins" can throw away real work, as almost happened with the eval report.
+
+## Calculators and due dates filled from official documents (15 Oct 2026)
+
+**What changed:** `data/rates.yaml` now holds the PF, EPS, EDLI, ESIC, gratuity and Gujarat PT figures, each with the official document, section and date, so the calculators answer instead of saying "Rate not configured". A new `due_dates` section and `app/deadlines.py` answer "When is PF due?", "TDS deposit due date", "24Q / Form 138 return", "Form 16 / Form 130" and "PT payment date in Gujarat", including the next due date counted from today. Figures read from a copy of the Gazette rather than the official site are marked `- check`.
+
+**What to learn:**
+- *Data, not code.* The due-date logic never contains a date. Changing a deadline is a one-line YAML edit with its source, and the tests use made-up dates to check the arithmetic only.
+- *Laws get renumbered.* From 1 April 2026 the Income-tax Act, 2025 applies: Form 24Q is now Form 138 and Form 16 is Form 130, under rules 215, 218 and 219 of the Income-tax Rules, 2026. The bot accepts both names because people still use the old ones.
+- *Say what's missing.* No gratuity ceiling has been notified under the Code yet, so the calculator shows the uncapped amount with a "Ceiling: not configured" row instead of silently using the old ₹20 lakh cap from the repealed Act.
