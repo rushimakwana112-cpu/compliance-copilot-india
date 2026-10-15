@@ -1,5 +1,6 @@
 # Render Blueprint: one free web service. Secrets are entered in the Render dashboard
 # (sync: false means "ask me for the value"), never committed here.
+# The app does not run ingestion on Render: Pinecone already holds the indexed documents.
 services:
   - type: web
     name: compliance-copilot
@@ -8,21 +9,23 @@ services:
     region: singapore          # closest Render region to India
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /healthz
+    healthCheckPath: /api/health   # always 200; the Groq check inside it is cached for a minute
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
-      - key: PUBLIC_MODE
-        value: "true"
       - key: LLM_PROVIDER
         value: groq
       - key: EMBED_PROVIDER
         value: pinecone
-      - key: GROQ_API_KEY
-        sync: false
+      - key: PUBLIC_MODE
+        value: "true"
+      - key: SCORE_THRESHOLD
+        value: "0.38"
       - key: GROQ_MODEL
-        sync: false            # pick one with: python -m app.list_models
-      - key: PINECONE_API_KEY
-        sync: false
+        value: qwen/qwen3.8-27b
       - key: PINECONE_INDEX
-        sync: false            # e.g. compliance-copilot-cloud, the index you ingested into
+        value: compliance-copilot-cloud
+      - key: GROQ_API_KEY
+        sync: false            # secret: pasted in the Render dashboard
+      - key: PINECONE_API_KEY
+        sync: false            # secret: pasted in the Render dashboard
