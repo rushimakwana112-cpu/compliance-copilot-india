@@ -10,6 +10,12 @@ answer usually comes from one of them. So we:
 3. cap every other section at ~1,800 characters with 200 characters of overlap,
    cutting only where a sub-clause like (2) or (b) starts, never inside one.
 
+Schedules ("THE FIRST SCHEDULE [See section 53]") and end matter ("STATEMENT OF
+OBJECTS AND REASONS", "NOTES ON CLAUSES", "FINANCIAL MEMORANDUM") get their own
+labels; numbered list items inside them are never taken for sections, and end
+matter is marked as commentary. In the body, "N. Heading.—" starts a new section
+only when N follows the previous section number.
+
 Chunks are numbered across the whole document (`chunk_no`), so retrieval can
 fetch a chunk's neighbours in the same section.
 """
@@ -27,10 +33,16 @@ OVERLAP = 200
 DEF_MAX_CHARS = 3000  # a definition up to this size stays in one chunk
 MIN_SEGMENT = 80  # heading-only segments (a lone "CHAPTER V  GRATUITY") are merged into the next one
 
+ORDINALS = "FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH|ELEVENTH|TWELFTH"
+MAX_SECTION_GAP = 3  # a few section numbers may be missing (omitted sections, a heading lost in extraction)
+
 # Each alternative captures a heading at the start of a line.
 BOUNDARY = re.compile(
     r"""^\s*(?:
-        (?P<chapter>CHAPTER\s+[IVXLC]+\b)                                   # CHAPTER VI
+        (?P<endmatter>STATEMENT\s+OF\s+OBJECTS\s+AND\s+REASONS|NOTES\s+ON\s+CLAUSES|FINANCIAL\s+MEMORANDUM
+                     |MEMORANDUM\s+REGARDING\s+DELEGATED\s+LEGISLATION)\b
+      | (?P<schedule>(?:THE\s+)?(?:(?P<ordinal>""" + ORDINALS + r""")\s+)?SCHEDULE(?:\s+(?P<roman>[IVX]{1,5}))?)\b(?!\s+[a-z])
+      | (?P<chapter>CHAPTER\s+[IVXLC]+\b)                                   # CHAPTER VI
       | (?:Section|SECTION)\s+(?P<sec>\d{1,3}[A-Z]{0,2})\b                   # Section 53
       | (?:Rule|RULE)\s+(?P<rule>\d{1,3}[A-Z]{0,2})\b                        # Rule 12
       | (?P<num>\d{1,3}[A-Z]{0,2})\.\s+(?P<title>[A-Z][^\n.—–]{2,100}?)\s*\.?\s*[—–-]  # 53. Gratuity.—
@@ -38,6 +50,7 @@ BOUNDARY = re.compile(
     )""",
     re.MULTILINE | re.VERBOSE,
 )
+SEE_SECTION = re.compile(r"^\s*\[\s*see\s+((?:sections?|rule|clause)\s+[^\]\n]{1,60}?)\s*\]", re.IGNORECASE)
 
 # Where a numbered or lettered sub-clause starts: "(1) ", "(2A) ", "(a) ", "(zz) ", "(iv) ".
 SUBCLAUSE = re.compile(r"(?:(?<=\s)|(?<=[—–:;.,-])|^)\((?:\d{1,3}[A-Z]?|[a-z]{1,2}|[ivxl]{1,6})\)\s", re.MULTILINE)
@@ -62,6 +75,7 @@ class Chunk:
     chapter: str = ""  # "Chapter V — Gratuity"
     heading: str = ""  # the section's own title, e.g. "Payment of gratuity"
     term: str = ""  # the defined term, for chunks of a Definitions section
+    kind: str = "body"  # body | schedule | commentary (end matter such as the Statement of Objects and Reasons)
 
 
 @dataclass
@@ -70,6 +84,7 @@ class Section:
     chapter: str
     heading: str
     start: int  # offset in the joined document text
+    kind: str = "body"
     text: str = ""
     pages: list[tuple[int, int]] = field(default_factory=list)  # (offset, page number) for page_at
 
@@ -86,6 +101,34 @@ def _label(m: re.Match[str], doc_type: str) -> str:
         word = "Rule" if doc_type == "rules" else "Para" if doc_type in ("circular", "notification") else "Section"
         return f"{word} {g['num']} · {g['title'].strip()}"
     return f"FAQ {g['q']}"
+
+
+def _schedule_label(m: re.Match[str], text: str) -> str:
+    """'THE FIRST SCHEDULE [See section 53]' → 'First Schedule (see section 53)'."""
+    name = "Schedule"
+    if m.group("ordinal"):
+        name = f"{m.group('ordinal').title()} Schedule"
+    elif m.group("roman"):
+        name = f"Schedule {m.group('roman')}"
+    see = SEE_SECTION.search(text[m.end() : m.end() + 120])
+    return f"{name} (see {see.group(1).lower()})" if see else name
+
+
+def _number(label: str) -> tuple[int, str] | None:
+    m = re.search(r"(?:Section|Rule|Para)\s+(\d{1,3})([A-Z]{0,2})", label)
+    return (int(m.group(1)), m.group(2)) if m else None
+
+
+def _in_sequence(n: tuple[int, str], last: tuple[int, str] | None) -> bool:
+    """Is section `n` a plausible next section after `last`? 53A may follow 53; 54 follows 53 or 53A.
+
+    The first numbered heading is always accepted: an excerpt may start at any section.
+    """
+    if last is None:
+        return True
+    if n[0] == last[0]:
+        return n[1] > last[1]
+    return last[0] < n[0] <= last[0] + MAX_SECTION_GAP
 
 
 def _chapter_title(text: str, end: int) -> str:
@@ -117,16 +160,37 @@ def segments(pages: list[Page], doc_type: str = "act") -> list[Section]:
 
     out: list[Section] = []
     chapter = ""
+    mode = "body"  # body → schedule → commentary; list items in the last two are never sections
+    last: tuple[int, str] | None = None
     current = Section("", "", "", 0)
     for m in BOUNDARY.finditer(text):
+        if m.group("endmatter"):
+            mode, chapter = "commentary", ""
+            label, heading = " ".join(m.group("endmatter").split()).title().replace(" And ", " and ").replace(
+                " Of ", " of ").replace(" On ", " on "), ""
+        elif m.group("schedule"):
+            if mode == "commentary":
+                continue  # "the Schedule" mentioned in end matter
+            mode, chapter = "schedule", ""
+            label, heading = _schedule_label(m, text), _chapter_title(text, m.end())
+        elif mode != "body":
+            continue  # "7. The Cine…" in a schedule is a list item, not Section 7
+        else:
+            label = _label(m, doc_type)
+            heading = (m.group("title") or "").strip()
+            if m.group("num"):
+                n = _number(label)
+                if n is None or not _in_sequence(n, last):
+                    continue  # out of sequence: a numbered list item inside a section
+                last = n
+            elif m.group("sec") or m.group("rule"):
+                last = _number(label) or last
+            if m.group("chapter"):
+                title = _chapter_title(text, m.end())
+                chapter = f"{label} — {title}" if title else label
         current.text = text[current.start : m.start()]
         out.append(current)
-        label = _label(m, doc_type)
-        heading = (m.group("title") or "").strip()
-        if m.group("chapter"):
-            title = _chapter_title(text, m.end())
-            chapter = f"{label} — {title}" if title else label
-        current = Section(label, chapter, heading, m.start())
+        current = Section(label, chapter, heading, m.start(), mode)
     current.text = text[current.start :]
     out.append(current)
 
@@ -138,7 +202,7 @@ def segments(pages: list[Page], doc_type: str = "act") -> list[Section]:
             continue
         if carry:
             sec = Section(sec.label or carry.label, sec.chapter or carry.chapter, sec.heading or carry.heading,
-                          carry.start, carry.text + sec.text)
+                          carry.start, sec.kind, carry.text + sec.text)
             carry = None
         if len(sec.text.strip()) < MIN_SEGMENT:
             carry = sec
@@ -277,11 +341,12 @@ def chunk_pages(pages: list[Page], doc_type: str = "act", size: int = MAX_CHARS,
     """Full chunking pipeline: headings, then definitions per term, then the size cap."""
     chunks: list[Chunk] = []
     for sec in segments(pages, doc_type):
-        if is_definitions(sec):
+        if sec.kind == "body" and is_definitions(sec):
             chunks += definition_chunks(sec, doc)
             continue
         for offset, piece in pack(sec.text, size, overlap):
-            chunks.append(Chunk(piece, _page(sec, offset), sec.label, chapter=sec.chapter, heading=sec.heading))
+            chunks.append(Chunk(piece, _page(sec, offset), sec.label, chapter=sec.chapter, heading=sec.heading,
+                                kind=sec.kind))
     for i, c in enumerate(chunks):
         c.chunk_no = i
     return chunks

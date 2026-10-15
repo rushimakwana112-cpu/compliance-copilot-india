@@ -46,6 +46,79 @@ def test_section_label_carries_over_page_break():
     assert chunks[0].page == 1 and chunks[-1].page == 2 and chunks[-1].section.startswith("Section 12")
 
 
+# Shaped like the Code on Social Security's last pages: the end of the body, the First Schedule
+# (a numbered list of establishments, p. 97) and the Statement of Objects and Reasons (p. 111-112).
+FILLER = "and the appropriate Government may by notification extend the provisions to any other class. " * 4
+SS_TAIL = [
+    Page(96, f"163. Power to remove difficulties.—(1) If any difficulty arises in giving effect {FILLER}\n"
+             f"164. Repeal and savings.—(1) The enactments specified in the Seventh Schedule {FILLER}"),
+    Page(97, "THE FIRST SCHEDULE\n[See section 53]\nLIST OF ESTABLISHMENTS TO WHICH CHAPTER V APPLIES\n"
+             "1. Every factory, mine, oilfield, plantation, port and railway company.—\n"
+             f"2. Every shop or establishment in which ten or more employees are employed.—{FILLER}\n"
+             "7. The Cine-workers and cinema theatre establishments.—employing ten or more persons.\n"
+             f"8. Any other establishment notified by the Central Government.—{FILLER}"),
+    Page(111, "STATEMENT OF OBJECTS AND REASONS\n"
+              f"The Second National Commission on Labour recommended that the labour laws be grouped. {FILLER}\n"
+              f"5. The salient features of the Code on Social Security, 2020, inter alia, are as follows.—{FILLER}"),
+    Page(112, f"8. Any other matter which may be prescribed by the Central Government.—{FILLER}\n"
+              "NOTES ON CLAUSES\n"
+              f"Clause 53 of the Bill provides for payment of gratuity to employees. {FILLER}"),
+]
+
+
+def _by_page(chunks):
+    out: dict[int, set[str]] = {}
+    for c in chunks:
+        out.setdefault(c.page, set()).add(c.section)
+    return out
+
+
+def test_schedule_list_items_are_not_sections():
+    chunks = chunk_pages(SS_TAIL)
+    p97 = [c for c in chunks if c.page == 97]
+    assert p97 and {c.section for c in p97} == {"First Schedule (see section 53)"}
+    assert {c.kind for c in p97} == {"schedule"}
+    assert not any("Cine" in c.section or c.section.startswith("Section 7") for c in chunks)
+    assert "7. The Cine-workers" in " ".join(c.text for c in p97)
+
+
+def test_end_matter_is_labelled_and_marked_commentary():
+    chunks = chunk_pages(SS_TAIL)
+    pages = _by_page(chunks)
+    assert pages[111] == {"Statement of Objects and Reasons"}
+    assert "Notes on Clauses" in pages[112]
+    assert pages[112] <= {"Statement of Objects and Reasons", "Notes on Clauses"}
+    assert "8. Any other matter" in " ".join(c.text for c in chunks if c.section == "Statement of Objects and Reasons")
+    assert not any(s.startswith(("Section 5", "Section 8")) for s in pages[111] | pages[112])
+    end = [c for c in chunks if c.page >= 111]
+    assert {c.kind for c in end} == {"commentary"}
+    assert {c.kind for c in chunks if c.page == 96} == {"body"}
+    assert {c.section for c in chunks if c.page == 96} >= {"Section 163 · Power to remove difficulties",
+                                                          "Section 164 · Repeal and savings"}
+
+
+@pytest.mark.parametrize("heading, label", [
+    ("THE SECOND SCHEDULE\n[See sections 2(25) and 45]", "Second Schedule (see sections 2(25) and 45)"),
+    ("SCHEDULE\n[See rule 3]", "Schedule (see rule 3)"),
+    ("SCHEDULE II", "Schedule II"),
+    ("FINANCIAL MEMORANDUM", "Financial Memorandum"),
+])
+def test_schedule_and_end_matter_headings(heading, label):
+    pages = [Page(1, f"4. Registration.—{FILLER}"), Page(2, f"{heading}\n1. First item of the list.—{FILLER}")]
+    assert [c.section for c in chunk_pages(pages) if c.page == 2] == [label]
+
+
+def test_numbered_list_inside_a_section_is_not_a_new_section():
+    text = (f"53. Payment of gratuity.—(1) Gratuity shall be payable {FILLER}\n"
+            f"7. The Cine-workers employed in any establishment.—{FILLER}\n"
+            f"54. Calculation of gratuity.—(1) For every completed year {FILLER}\n"
+            f"2. Definitions.—a list item that only looks like a heading {FILLER}\n"
+            f"54A. Recovery of gratuity.—{FILLER}")
+    labels = [c.section for c in chunk_pages([Page(1, text)])]
+    assert labels == ["Section 53 · Payment of gratuity", "Section 54 · Calculation of gratuity",
+                      "Section 54A · Recovery of gratuity"]
+
+
 DEFINITIONS = """CHAPTER I
 PRELIMINARY
 2. Definitions.—In this Code, unless the context otherwise requires,—
