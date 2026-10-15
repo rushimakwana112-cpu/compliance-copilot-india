@@ -17,7 +17,7 @@ from eval.run import (
 
 def test_questions_file_shape():
     rows = load_questions()
-    assert len(rows) == 35
+    assert len(rows) == 43
     assert all(r.type == "tool" for r in rows if r.id in {"q08", "q34", "q35"})  # due-date questions
     assert sum(r.type == "not_found" for r in rows) == 5
     assert sum(bool(r.follow_up_of) for r in rows) == 5

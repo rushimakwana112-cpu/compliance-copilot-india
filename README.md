@@ -9,8 +9,25 @@
 Try asking:
 
 1. *Who is eligible for gratuity under the Code on Social Security?*
-2. *What is the definition of wages under the Code on Wages?*
-3. *Is overtime paid at a higher rate than ordinary wages?*
+2. *My CTC is ₹6 lakh a year, what is my in-hand?*
+3. *Tax on ₹12 lakh, old vs new regime*
+
+### What it answers
+
+The bot has **no employee data**: no payslips, salary history, attendance or bank details. It answers from the law and from figures you type.
+
+| Category | Examples |
+|---|---|
+| Salary | CTC or gross to in-hand (asks for basic, PF, ESIC and state first), per-day salary, unpaid-leave deduction, first and last month's salary, increment and arrears, full and final settlement |
+| PF | Rates and the EPF/EPS split, wage ceiling, PF on a basic, UAN, balance, transfer, withdrawal and its tax |
+| ESIC | Coverage, rates, ESIC on a gross, contribution periods, benefits and claims |
+| Professional Tax | What it is, Gujarat slabs (default state), PT on a salary |
+| Income tax | Old vs new regime slabs, standard deduction, rebate, tax on an income in both regimes, HRA exemption, deductions, monthly TDS, Form 130 (formerly Form 16) |
+| Bonus, gratuity, leave, overtime | Rules from the Codes, gratuity amount, overtime at twice the rate, leave encashment |
+| Due dates | PF, ESIC, Professional Tax, TDS deposit, quarterly TDS statement, Form 130 |
+| Personal records | "What is my salary?", "What is my PF balance?": explains it can't see records, offers to calculate, points to HR/payroll and EPFO |
+
+It also asks one short question when a message is vague ("PF?"), points out impossible figures (₹-5,000, 40 working days), refuses prompt injection and off-topic chat, understands short forms ("pf kitna katega 18000 basic", "sal 25k in hand?"), answers in Hindi, Gujarati or Hinglish when asked that way, and rechecks your own calculation ("Is this correct? PF on basic 18000 = 2160").
 
 | Light theme | Dark theme |
 |---|---|
@@ -24,9 +41,10 @@ A portfolio project by **Cyber Panther**, built as a Learnbay assignment. India'
 ## How it works
 
 1. **Jurisdiction.** Central law is always searched; a state or city in the question (for example "Ahmedabad") adds that state's rules.
-2. **Routing.** A calculation ("PF for basic ₹20,000") or a due date ("When is TDS on salary due?") goes to Python code that reads `data/rates.yaml`, a question about the synthetic sample employees goes to a guarded text-to-SQL agent, and everything else goes to retrieval.
-3. **Retrieval.** Pinecone searches the indexed documents (hosted `llama-text-embed-v2` embeddings), filtered to current law and the right scope. Low scores end in "not found" without calling the model.
-4. **Answer.** Groq's language model writes the answer from the numbered passages only and cites them; the page shows each citation with the document, section and page.
+2. **Guards and language.** Short forms are expanded and Hindi or Gujarati is translated for routing. Questions about personal records or other employees, prompt injection, off-topic chat, vague one-word questions and impossible figures get a fixed answer at once (`guards.py`).
+3. **Routing.** A calculation ("PF for basic ₹20,000", "tax on ₹12 lakh", "my CTC is ₹6 lakh") or a due date goes to Python code that reads `data/rates.yaml` (`tools.py`, `salary.py`, `tax.py`, `labour.py`, `deadlines.py`); a missing figure is asked for, never assumed. Common explanations (CTC vs gross, UAN, Form 130, deductions) come from `data/faq.yaml` with official citations. Everything else goes to retrieval.
+4. **Retrieval.** Pinecone searches the indexed documents (hosted `llama-text-embed-v2` embeddings), filtered to current law and the right scope. Low scores end in "not found" without calling the model.
+5. **Answer.** Groq's language model writes the answer from the numbered passages only and cites them; the page shows each citation with the document, section and page.
 
 Statutory figures (rates, ceilings) are never hard-coded: they come only from the cited documents and from `data/rates.yaml`, where each figure carries its source and effective dates.
 
@@ -35,13 +53,15 @@ flowchart LR
     U[Browser<br/>frontend/index.html] -->|POST /api/chat<br/>or /api/chat/stream| P[pipeline.py]
     P --> RW[Follow-up rewrite<br/>last 4 turns]
     RW --> J[jurisdiction.py<br/>Central + state]
+    P --> GU[guards.py<br/>no employee data · vague · invalid]
+    P --> C[salary.py · tax.py · labour.py<br/>CTC · tax · bonus · overtime]
+    P --> F[faq.py<br/>data/faq.yaml]
+    C --> Y
+    F --> Y
     J --> R{router.py<br/>rules or LLM}
-    R -->|calculate + amount| T[tools.py<br/>PF · ESIC · PT · gratuity]
-    R -->|sample data| S[sql_agent.py<br/>text-to-SQL + guard]
+    R -->|calculate + amount<br/>or due date| T[tools.py · deadlines.py<br/>PF · ESIC · PT · gratuity]
     R -->|everything else| G[rag.py]
     T --> Y[(data/rates.yaml)]
-    S --> DB[(sample_payroll.db<br/>read-only)]
-    S --> Y
     G -->|search by text<br/>filter: status=current,<br/>scope in central+state| PC[(Pinecone<br/>embeds with llama-text-embed-v2<br/>or bge-m3 via Ollama)]
     G -->|score below threshold| NF[not_found<br/>no LLM call]
     G -->|numbered passages| O[LLM_PROVIDER<br/>Groq or Ollama]
@@ -68,11 +88,11 @@ All documents are official and listed in [`data/sources.csv`](data/sources.csv);
 | Gazette: Implementation of Code on Social Security, 2020 | 21 Nov 2025 | [labour.gov.in](https://www.labour.gov.in/static/uploads/2025/12/b602569a9cd014c49d91472b6a22b24c.pdf) |
 | Gazette: Implementation of Industrial Relations Code, 2020 | 21 Nov 2025 | [labour.gov.in](https://www.labour.gov.in/static/uploads/2025/12/3db01976470a13d7b54b0e6e410d42b8.pdf) |
 
-The Industrial Relations Code and the Occupational Safety, Health and Working Conditions Code themselves are not indexed yet. The sample payroll table used by the SQL agent is synthetic; no real employee data is used.
+The Industrial Relations Code and the Occupational Safety, Health and Working Conditions Code themselves are not indexed yet. The bot has no employee data. The synthetic sample payroll table and its SQL agent are off by default (`SAMPLE_DATA=true` turns them on for a local demo).
 
 ## Evaluation
 
-`eval/questions.csv` has 35 questions: 18 retrieval questions (5 of them follow-ups), 5 calculator, 3 due-date, 4 SQL and 5 trick questions that must be refused. Questions whose documents are not indexed yet are skipped and left out of the metrics. Full per-question results: [`eval/report.md`](eval/report.md).
+`eval/questions.csv` has 43 questions: 18 retrieval questions (5 of them follow-ups), 12 calculator and due-date, 8 fixed answers (no employee data, explanations, clarifying questions) and 5 trick questions that must be refused. Questions whose documents are not indexed yet are skipped and left out of the metrics. Full per-question results: [`eval/report.md`](eval/report.md).
 
 <!-- eval-results:start (scripts/run_all.ps1 rewrites this block from eval/report.md) -->
 | Metric | Value |
@@ -161,6 +181,7 @@ Click **Deploy to Render** at the top. [DEPLOY.md](DEPLOY.md) has the steps. The
 | `RATE_LIMIT_PER_MIN` | `10` | Chats per IP per minute in public mode |
 | `RATE_LIMIT_PER_DAY` | `60` | Chats per IP per day in public mode |
 | `CACHE_SIZE` | `500` | Answers kept in the cache; `0` turns it off |
+| `SAMPLE_DATA` | `false` | `true` lets questions about the synthetic sample payroll use the SQL agent (local demo only) |
 
 ## API
 
@@ -170,7 +191,7 @@ Click **Deploy to Render** at the top. [DEPLOY.md](DEPLOY.md) has the steps. The
 | `GET /healthz` | `{ok: true}` with no outside calls |
 | `GET /api/documents` | `[{name, scope, status, meta}]`: from `data/manifest.json`, or from `data/sources.csv` when there is no manifest (as on Render) |
 | `GET /api/states` | `[{id, name, aliases[]}]` |
-| `POST /api/chat` | `{message (≤ 1,000 chars), history[] (last 4 turns used), jurisdiction}` → `{type: rag\|tool\|sql\|not_found\|error, answer, scope, citations[], table?, tool?, sql?, rows_scanned?, note?, latency_ms, cached?, quota_exceeded?}`. In public mode, 429 with the same shape when the IP is over its limit |
+| `POST /api/chat` | `{message (≤ 1,000 chars), history[] (last 4 turns used), jurisdiction}` → `{type: rag\|tool\|guide\|sql\|not_found\|error, answer, scope, citations[], table?, tool?, sql?, rows_scanned?, note?, latency_ms, cached?, quota_exceeded?}`. In public mode, 429 with the same shape when the IP is over its limit |
 | `POST /api/chat/stream` | Server-Sent Events: `meta`, then `token`…, then `done` with the same JSON as `/api/chat` |
 | `POST /api/ingest/file` | multipart `file` (PDF ≤ 20 MB) + `scope`; indexes in the background. 403 in public mode |
 | `POST /api/ingest/url` | `{url (https), scope}`; downloads and indexes in the background. 403 in public mode |
@@ -184,7 +205,7 @@ Click **Deploy to Render** at the top. [DEPLOY.md](DEPLOY.md) has the steps. The
 app/        FastAPI app and the answer pipeline
 ingest/     download → parse → chunk → index
 frontend/   index.html (single file, no framework)
-data/       sources.csv, rates.yaml, states.yaml, sql_examples.yaml, sample_payroll.db
+data/       sources.csv, rates.yaml, faq.yaml, states.yaml, sql_examples.yaml, sample_payroll.db
 eval/       questions.csv, run.py, report.md
 tests/      pytest suite with fake Groq, Ollama and Pinecone
 render.yaml                Render Blueprint for the free web service

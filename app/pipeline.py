@@ -56,7 +56,10 @@ def plan(services: Services, req: ChatRequest) -> Turn:
     if scope.how == "default" and question != req.message and detect_states(question):
         # "and the PT there?" → the rewritten question carries the state from earlier turns
         scope = resolve(question, j.mode, j.state)
-    return Turn(req.message, question, scope, route(question, s.router, services.llm), rag.Trace(index=s.pinecone_index))
+    path = route(question, s.router, services.llm)
+    if path == "sql" and not s.sample_data:
+        path = "guide"  # no employee data: answered by guards.no_data()
+    return Turn(req.message, question, scope, path, rag.Trace(index=s.pinecone_index))
 
 
 def out_of_scope(services: Services, req: ChatRequest) -> tuple[Turn, ChatResponse] | None:
@@ -120,7 +123,8 @@ def finish(services: Services, turn: Turn, resp: ChatResponse) -> ChatResponse:
     note = guards.advice_note(turn.message)
     if note and note not in resp.answer and resp.type in ("rag", "tool", "guide"):
         resp.answer = f"{resp.answer}\n\n{note}"
-    if turn.lang != "en" and turn.route != "rag" and not resp.rate_limited:
+    # The CTC questions stay in English: the next reply is matched against their numbered list.
+    if turn.lang != "en" and turn.route != "rag" and not resp.rate_limited and salary.CTC_MARK not in resp.answer:
         resp.answer = lang.translate(services.llm, resp.answer, turn.lang)  # type: ignore[arg-type]
     return resp
 
@@ -133,7 +137,9 @@ def _answer(services: Services, turn: Turn) -> ChatResponse:
     if turn.route == "tool":
         resp = tools.run(turn.question, turn.scope)
     elif turn.route == "sql":
-        resp = sql_agent.run(services, turn.question) if services.settings.sample_data else guards.no_data()
+        resp = sql_agent.run(services, turn.question)
+    elif turn.route == "guide":
+        resp = guards.no_data()
     else:
         resp, _ = rag.answer(services, turn.question, turn.scope, turn.trace, lang=turn.lang)
     resp.scope = resp.scope or _scope_out(turn.scope)

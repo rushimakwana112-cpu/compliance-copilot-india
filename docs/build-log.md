@@ -196,3 +196,20 @@ A new test (`tests/test_deploy.py`) fails if a legal-looking number (PF/EPS/ESIC
 - *Data, not code.* The due-date logic never contains a date. Changing a deadline is a one-line YAML edit with its source, and the tests use made-up dates to check the arithmetic only.
 - *Laws get renumbered.* From 1 April 2026 the Income-tax Act, 2025 applies: Form 24Q is now Form 138 and Form 16 is Form 130, under rules 215, 218 and 219 of the Income-tax Rules, 2026. The bot accepts both names because people still use the old ones.
 - *Say what's missing.* No gratuity ceiling has been notified under the Code yet, so the calculator shows the uncapped amount with a "Ceiling: not configured" row instead of silently using the old ₹20 lakh cap from the repealed Act.
+
+## Answers for every kind of employee question (15 Oct 2026)
+
+**What changed:** the bot now handles the 11 categories of questions a real employee asks, without any employee data:
+- `app/guards.py` answers first, with no model call: personal records ("What is my salary?") point to HR/payroll and the EPFO passbook; other employees and employee lists get "no employee data"; prompt injection and off-topic chat are refused; "PF?" gets one clarifying question; ₹0, negative amounts and 40 working days are pointed out.
+- `app/salary.py` works out in-hand salary from CTC or gross. It never guesses: it asks for monthly/yearly, basic, PF (full basic or capped, employer share in CTC), ESIC (only if gross can be within the ceiling) and state in one message, then shows each step. If you don't know whether PF or ESIC applies, it shows both results, labelled. It also does per-day pay, loss of pay, first and last month's salary, increments and arrears.
+- `app/tax.py` compares the old and new regimes step by step (slabs, standard deduction, rebate and marginal relief, surcharge, cess, HRA exemption, deductions, monthly TDS). `app/labour.py` does bonus, overtime and leave encashment.
+- `data/faq.yaml` holds short explanations (CTC vs gross, UAN, Form 130, ESI benefits, deductions by regime...) whose figures are filled from rates.yaml.
+- `app/lang.py` understands "pf kitna katega", "sal 25k in hand?" and answers in Hindi, Gujarati or Hinglish. Translated answers are checked: if any number changed, the English answer is used instead.
+- "Is this correct? PF on basic 18000 = 2160" recalculates and says whether your figure matches.
+- The SQL route over sample employees is off (`SAMPLE_DATA=false`), because the bot has no employee data.
+
+**What to learn:**
+- *Slot filling.* A multi-turn calculator doesn't need a database: the questions the bot asked are in the chat history, so the next reply ("1. yearly 2. 40% 3. yes, capped") can be matched back to them.
+- *Refuse cheaply.* Regex guards run before retrieval and the model, so a "show my payslip" question costs nothing and can't be talked into inventing data.
+- *Never let translation touch numbers.* The model translates, Python compares every number before and after, and falls back to English if one changed.
+- *Ask instead of assume.* 26 vs 30 days, basic as % of CTC and whether employer PF is inside CTC are company policy, so the bot asks; the law only says the deduction must be in proportion to the absence (Code on Wages s.20).

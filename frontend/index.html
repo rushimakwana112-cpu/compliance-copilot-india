@@ -481,7 +481,7 @@ pre.code {
           <dt>LLM</dt><dd id="kvModel">Ollama · qwen2.5:7b</dd>
           <dt>Embeddings</dt><dd id="kvEmbed">bge-m3</dd>
           <dt>Vector DB</dt><dd>Pinecone</dd>
-          <dt>Data</dt><dd>sample_payroll.db</dd>
+          <dt>Data</dt><dd>rates.yaml + your figures</dd>
           <dt>Mode</dt><dd id="modeLabel">demo</dd>
           <dt>PF ceiling</dt><dd id="kvPfCeiling" title="From data/rates.yaml via /api/rates">[from rates.yaml]</dd>
         </dl>
@@ -569,7 +569,11 @@ const SUGGESTIONS = [
   "Calculate professional tax on ₹15,000 salary in Ahmedabad",
   "TDS on salary deposit due date",
   "How much ESIC on gross ₹18,000?",
-  "Which sample employees are above the ESIC limit?",
+  "My CTC is ₹6 lakh a year, what is my in-hand?",
+  "Tax on ₹12 lakh, old vs new regime",
+  "3 days unpaid leave on ₹26,000 salary, 30 days basis",
+  "pf kitna katega 18000 basic",
+  "What is the difference between CTC and gross salary?",
   "Gratuity rule for fixed-term employees",
   "Compare Gujarat and Maharashtra PT",
   "Gratuity rule in Dubai?"
@@ -578,9 +582,9 @@ const STARTERS = [
   { t: "Calculate", s: "Calculate PF for basic ₹18,000" },
   { t: "Due date", s: "When is TDS on salary due?" },
   { t: "State rule", s: "Calculate professional tax on ₹15,000 salary in Ahmedabad" },
-  { t: "Sample data", s: "Which sample employees are above the ESIC limit?" }
+  { t: "In-hand salary", s: "My CTC is ₹6 lakh a year, what is my in-hand?" }
 ];
-const ROUTE_LABEL = { rag: "RAG", tool: "Tool", sql: "SQL", not_found: "Not found" };
+const ROUTE_LABEL = { rag: "RAG", tool: "Tool", sql: "SQL", guide: "Guide", not_found: "Not found" };
 
 /* ============================ STATE ============================ */
 const store = {
@@ -788,6 +792,7 @@ const BADGE = {
   rag: '<span class="badge rag">From documents</span>',
   tool: '<span class="badge tool">Calculator</span>',
   sql: '<span class="badge sql">SQL query</span>',
+  guide: '<span class="badge tool">Guide</span>',
   not_found: '<span class="badge nf">Not in my documents</span>',
   error: '<span class="badge nf">Search failed</span>'
 };
@@ -1102,12 +1107,11 @@ function demoAnswer(q, scope) {
       citations: [{ doc: "EPFO contribution-rate circular", section: "[para]", page: "", score: null, snippet: "Effective [date]", url: "" }]
     };
   }
-  if (/esic|esi\b/.test(t) && /(employee|sample|above|list|which)/.test(t)) {
+  if (/\bmy (salary|payslip|pf balance)\b|sample|list (all )?employees/.test(t) && !amount) {
     return {
-      type: "sql", rows_scanned: 25,
-      answer: "[N] rows from the synthetic sample data: [E104], [E111], [E117]… ESIC should not be deducted for them.",
-      sql: "SELECT emp_id, name, gross\nFROM employees\nWHERE gross > :esic_ceiling\nORDER BY gross DESC\nLIMIT 200",
-      note: "Read-only query on synthetic data. The ceiling value is pulled from rates.yaml, not written in the SQL."
+      type: "guide",
+      answer: "I don't have access to employee data, so I can't see payslips, salaries or PF balances. Give me the figures and I'll calculate, or check with HR/payroll and the EPFO passbook.",
+      note: "No employee data."
     };
   }
   if (/esic|esi\b/.test(t)) {
