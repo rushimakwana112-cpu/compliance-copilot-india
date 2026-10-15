@@ -228,9 +228,9 @@ def esic_calculator(gross: float, rates: dict[str, Any] | None = None, on: date 
     )
 
 
-def professional_tax(state: str, monthly_salary: float, rates: dict[str, Any] | None = None,
-                     on: date | None = None) -> ChatResponse:
-    """Monthly Professional Tax from the state's slab table valid on `on`."""
+def pt_monthly(state: str, monthly_salary: float, rates: dict[str, Any] | None = None,
+               on: date | None = None) -> tuple[float, Rate, str]:
+    """(monthly PT, its source, slab label) from the state's slab table valid on `on`. Raises RateMissing."""
     r = rates or load_rates()
     block = pick((r.get("professional_tax") or {}).get(state), on)
     if not block or not block.get("slabs"):
@@ -243,14 +243,25 @@ def professional_tax(state: str, monthly_salary: float, rates: dict[str, Any] | 
         if monthly_salary >= lo and (hi is None or monthly_salary <= hi):
             low = f"above {inr(math.floor(lo))}" if lo != int(lo) else f"{inr(lo)} and above"  # 12000.01 = above 12,000
             band = f"{inr(lo)} – {inr(hi)}" if hi is not None else low
-            name = next((s.name for s in load_states() if s.id == state), state)
-            return ChatResponse(
-                type="tool", tool=f"professional_tax(state={state!r}, monthly_salary={monthly_salary:g})",
-                answer=f"Professional Tax in {name} on a monthly salary of {inr(monthly_salary)}: {inr(tax)} per month.",
-                table=Table(columns=["State", "Slab", "PT per month"], rows=[[name, band, inr(tax)]]),
-                citations=_cite(src), note=NOTE,
-            )
+            return float(tax), src, band
     raise RateMissing(f"professional_tax.{state}.slabs (no slab covers {inr(monthly_salary)})", src.source_doc)
+
+
+def state_name(state: str) -> str:
+    return next((s.name for s in load_states() if s.id == state), state)
+
+
+def professional_tax(state: str, monthly_salary: float, rates: dict[str, Any] | None = None,
+                     on: date | None = None) -> ChatResponse:
+    """Monthly Professional Tax from the state's slab table valid on `on`."""
+    tax, src, band = pt_monthly(state, monthly_salary, rates, on)
+    name = state_name(state)
+    return ChatResponse(
+        type="tool", tool=f"professional_tax(state={state!r}, monthly_salary={monthly_salary:g})",
+        answer=f"Professional Tax in {name} on a monthly salary of {inr(monthly_salary)}: {inr(tax)} per month.",
+        table=Table(columns=["State", "Slab", "PT per month"], rows=[[name, band, inr(tax)]]),
+        citations=_cite(src), note=NOTE,
+    )
 
 
 def gratuity_estimate(last_basic_da: float, years: float, employment_type: str = "permanent",

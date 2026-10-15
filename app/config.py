@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     rate_limit_per_min: int = 10
     rate_limit_per_day: int = 60
     cache_size: int = 500
+    # The bot has no employee data. Set SAMPLE_DATA=true to let questions about the synthetic
+    # sample payroll (data/sample_payroll.db) use the SQL route again, e.g. for a local demo.
+    sample_data: bool = False
 
     @model_validator(mode="after")
     def _default_threshold(self) -> "Settings":
