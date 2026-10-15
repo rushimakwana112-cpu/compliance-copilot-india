@@ -10,8 +10,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.llm import (BUSY_MESSAGE, QUOTA_MESSAGE, Busy, GroqClient, LLMError, OllamaClient, QuotaExceeded,
-                     classify_rate_limit, estimate_tokens, make_llm)
+from app.llm import (
+    BUSY_MESSAGE,
+    QUOTA_MESSAGE,
+    Busy,
+    GroqClient,
+    LLMError,
+    OllamaClient,
+    QuotaExceeded,
+    classify_rate_limit,
+    estimate_tokens,
+    make_llm,
+)
 from app.main import create_app
 from app.services import Services
 

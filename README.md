@@ -220,6 +220,8 @@ Follow-ups are rewritten into a standalone question only when they clearly are o
 
 `eval/questions.csv` has 33 questions: 19 RAG (5 follow-ups), 5 calculator, 4 SQL and 5 trick questions that must be refused. In `expected_answer_contains`, `a|b` means any of and `a&b` means all of, so q31 checks that the wages definition includes both what wages include and what they exclude.
 
+`requires_doc` names the documents a question needs (same `|` / `&` syntax, matched against names in `data/manifest.json`). If they are not indexed, the question is reported as *skipped (doc not ingested)* instead of failed. On Groq's free tier the eval waits `--delay` seconds between questions (default 8). A question refused for a rate limit is asked once more after the provider's retry-after (up to `--max-wait`, default 90 s), then reported as *skipped (rate limited)*. Skipped questions are left out of every metric. The report header shows `GROQ_MODEL` and the average prompt tokens of the RAG answers.
+
 ```powershell
 python -m eval.run --sweep 0.34,0.38,0.42,0.47
 ```
