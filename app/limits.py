@@ -94,7 +94,7 @@ class AnswerCache:
         return resp
 
     def put(self, question: str, states: list[str], resp: ChatResponse) -> None:
-        if self.size <= 0 or resp.type not in CACHEABLE or resp.quota_exceeded:
+        if self.size <= 0 or resp.type not in CACHEABLE or resp.quota_exceeded or resp.rate_limited:
             return
         k = self.key(question, states)
         with self._lock:

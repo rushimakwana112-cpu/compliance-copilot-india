@@ -15,7 +15,7 @@ from typing import Any
 
 from app import logs, rag, sql_agent, tools
 from app.jurisdiction import Scope, detect_states, foreign_place, resolve
-from app.llm import QUOTA_MESSAGE, LLMError, QuotaExceeded
+from app.llm import LLMError, RateLimited
 from app.router import route
 from app.schemas import ChatRequest, ChatResponse, ScopeOut
 from app.services import Services
@@ -76,11 +76,16 @@ def _answer(services: Services, turn: Turn) -> ChatResponse:
     return resp
 
 
-def _llm_down(turn: Turn, err: Exception) -> ChatResponse:
-    if isinstance(err, QuotaExceeded):
-        return ChatResponse(type="not_found", answer=QUOTA_MESSAGE, scope=_scope_out(turn.scope), quota_exceeded=True)
+def _llm_down(turn: Turn | None, err: Exception) -> ChatResponse:
+    scope = _scope_out(turn.scope) if turn else None
+    if isinstance(err, RateLimited):
+        if turn:
+            turn.trace.rate_limit = {"window": err.window, "limit": err.limit or None, "retry_after": err.retry_after,
+                                     "prompt_tokens": err.prompt_tokens}
+        return ChatResponse(type="not_found", answer=str(err), scope=scope, rate_limited=err.window,  # type: ignore[arg-type]
+                            quota_exceeded=True if err.window == "day" else None)
     return ChatResponse(type="not_found", answer=f"The language model is not available: {err}",
-                        scope=_scope_out(turn.scope), note="Check /api/health.")
+                        scope=scope, note="Check /api/health.")
 
 
 def _search_failed(turn: Turn, err: rag.SearchError) -> ChatResponse:
@@ -146,9 +151,7 @@ def handle_stream(services: Services, req: ChatRequest) -> Iterator[tuple[str, d
     try:
         turn = plan(services, req)
     except LLMError as e:  # plan() already falls back on errors; this is a last resort
-        quota = isinstance(e, QuotaExceeded)
-        yield "done", ChatResponse(type="not_found", answer=QUOTA_MESSAGE if quota else f"The language model is not available: {e}",
-                                   quota_exceeded=quota or None).model_dump(exclude_none=True)
+        yield "done", _llm_down(None, e).model_dump(exclude_none=True)
         return
     yield "meta", {"route": turn.route, "scope": _scope_out(turn.scope).model_dump(exclude_none=True)}
     hit = _cached(services, turn, t0)

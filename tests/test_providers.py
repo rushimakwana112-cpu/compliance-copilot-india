@@ -10,7 +10,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.llm import QUOTA_MESSAGE, GroqClient, LLMError, OllamaClient, QuotaExceeded, make_llm
+from app.llm import (BUSY_MESSAGE, QUOTA_MESSAGE, Busy, GroqClient, LLMError, OllamaClient, QuotaExceeded,
+                     classify_rate_limit, estimate_tokens, make_llm)
 from app.main import create_app
 from app.services import Services
 
@@ -19,6 +20,23 @@ REQ = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
 
 def rate_limited() -> groq.RateLimitError:
     return groq.RateLimitError("rate limit", response=httpx.Response(429, request=REQ), body=None)
+
+
+def groq_429(limit: str, wait: str, retry_after: str = "") -> groq.RateLimitError:
+    """A 429 shaped like Groq's: the limit is named in error.message, retry-after in the headers."""
+    words = {"TPM": "tokens per minute", "RPM": "requests per minute", "TPD": "tokens per day",
+             "RPD": "requests per day"}[limit]
+    msg = (f"Rate limit reached for model `qwen-test` in organization `org_x` service tier `on_demand` on {words} "
+           f"({limit}): Limit 8000, Used 7400, Requested 2100. Please try again in {wait}. Need more tokens? Upgrade")
+    body = {"message": msg, "type": "tokens", "code": "rate_limit_exceeded"}
+    headers = {"retry-after": retry_after} if retry_after else {}
+    return groq.RateLimitError(f"Error code: 429 - {{'error': {body}}}",
+                               response=httpx.Response(429, request=REQ, headers=headers), body=body)
+
+
+class Sleeps(list):
+    def __call__(self, seconds: float) -> None:
+        self.append(seconds)
 
 
 def reply(text: str):
@@ -72,6 +90,65 @@ def test_groq_429_becomes_quota_exceeded_without_retry():
     with pytest.raises(QuotaExceeded):
         groq_client(sdk).chat([{"role": "user", "content": "hi"}])
     assert len(sdk.calls) == 1
+
+
+@pytest.mark.parametrize("text, headers, expected", [
+    ("on tokens per minute (TPM): Limit 8000. Please try again in 7.5s.", {}, ("minute", "TPM", 7.5)),
+    ("on requests per minute (RPM): Limit 30. Please try again in 450ms.", {}, ("minute", "RPM", 0.45)),
+    ("on tokens per day (TPD): Limit 500000. Please try again in 12m3.2s.", {}, ("day", "TPD", 723.2)),
+    ("on requests per day (RPD): Limit 1000.", {"retry-after": "3600"}, ("day", "RPD", 3600.0)),
+    ("rate limit", {"retry-after": "9"}, ("minute", "", 9.0)),  # unknown limit, short wait
+    ("rate limit", {}, ("day", "", None)),  # unknown limit, no wait: don't hammer the API
+])
+def test_classify_rate_limit(text, headers, expected):
+    assert classify_rate_limit(text, headers) == expected
+
+
+def test_per_minute_limit_waits_and_retries_once(caplog):
+    sleeps = Sleeps()
+    sdk = FakeGroqSDK(groq_429("TPM", "7.5s"), reply("ok"))
+    client = GroqClient("key", "qwen-test", client=sdk, sleep=sleeps)
+    with caplog.at_level("WARNING", logger="app"):
+        assert client.chat([{"role": "user", "content": "x" * 400}]) == "ok"
+    assert sleeps == [7.5] and len(sdk.calls) == 2
+    assert "window=minute limit=TPM" in caplog.text and "prompt_tokens=100" in caplog.text
+
+
+def test_per_minute_limit_wait_is_capped_then_busy():
+    sleeps = Sleeps()
+    sdk = FakeGroqSDK(groq_429("TPM", "45s"), groq_429("TPM", "40s"), reply("never reached"))
+    with pytest.raises(Busy) as e:
+        GroqClient("key", "qwen-test", client=sdk, sleep=sleeps).chat([{"role": "user", "content": "hi"}])
+    assert sleeps == [20.0] and len(sdk.calls) == 2  # waited at most 20 s, retried once
+    assert str(e.value) == BUSY_MESSAGE and e.value.limit == "TPM" and e.value.window == "minute"
+
+
+def test_daily_limit_is_not_retried():
+    sleeps = Sleeps()
+    sdk = FakeGroqSDK(groq_429("TPD", "12m3s", retry_after="723"), reply("never reached"))
+    with pytest.raises(QuotaExceeded) as e:
+        GroqClient("key", "qwen-test", client=sdk, sleep=sleeps).chat([{"role": "user", "content": "hi"}])
+    assert sleeps == [] and len(sdk.calls) == 1 and str(e.value) == QUOTA_MESSAGE and e.value.limit == "TPD"
+
+
+def test_busy_reaches_the_api_and_the_log(settings, store, tmp_path):
+    import json
+
+    from app import config
+
+    store.add("gratuity fixed term employee", doc="SS Code", page=1, scope="central", status="current", doc_type="act")
+    llm = GroqClient("key", "qwen-test", client=FakeGroqSDK(groq_429("TPM", "2s"), groq_429("TPM", "2s")),
+                     sleep=Sleeps())
+    with TestClient(create_app(Services(settings, llm, store))) as c:
+        body = c.post("/api/chat", json={"message": "gratuity fixed term employee"}).json()
+    assert body["answer"] == BUSY_MESSAGE and body["rate_limited"] == "minute" and "quota_exceeded" not in body
+    rec = json.loads((config.LOGS_DIR / "chats.jsonl").read_text().splitlines()[-1])
+    assert rec["rate_limit"]["window"] == "minute" and rec["rate_limit"]["limit"] == "TPM"
+    assert rec["rate_limit"]["prompt_tokens"] > 0
+
+
+def test_estimate_tokens():
+    assert estimate_tokens([{"role": "user", "content": "a" * 400}, {"role": "system", "content": "b" * 4}]) == 101
 
 
 def test_groq_timeout_retried_once():

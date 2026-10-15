@@ -71,6 +71,9 @@ class Trace:
     filters: list[dict[str, Any]] = field(default_factory=list)
     matches: dict[str, tuple[float, str, str]] = field(default_factory=dict)  # id -> (score, doc, section)
     searched: bool = False
+    prompt_tokens: int | None = None  # estimated size of the answer prompt (chars / 4)
+    dropped: int = 0  # passages dropped to fit the token budget
+    rate_limit: dict[str, Any] | None = None  # which provider limit refused the request
 
     def add(self, mid: str, score: float, meta: dict[str, Any]) -> None:
         old = self.matches.get(mid)
@@ -88,6 +91,9 @@ class Trace:
             "top_scores": [round(m[0], 3) for m in ranked[:n]],
             "retrieved": [{"doc": d, "section": sec, "score": round(sc, 3)} for sc, d, sec in ranked],
             "retrieval": "searched" if self.searched else "not run",
+            "prompt_tokens": self.prompt_tokens,
+            "dropped_passages": self.dropped,
+            "rate_limit": self.rate_limit,
         }
 
 

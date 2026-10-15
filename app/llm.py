@@ -11,6 +11,8 @@ the app only sees `chat`, `stream`, `embed` and `health`.
 from __future__ import annotations
 
 import json
+import logging
+import re
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
@@ -19,15 +21,78 @@ from typing import Any, Protocol, TypeVar
 import httpx
 
 T = TypeVar("T")
+log = logging.getLogger("app")
 QUOTA_MESSAGE = "Daily demo limit reached. Please try again later."
+BUSY_MESSAGE = "Busy right now, please retry in a minute."
+MAX_RATE_WAIT = 20.0  # seconds: the longest we wait out a per-minute limit before retrying once
 
 
 class LLMError(RuntimeError):
     """Raised when the model provider is unreachable, misconfigured or returns an error."""
 
 
-class QuotaExceeded(LLMError):
-    """The provider answered 429: the free-tier limit is used up."""
+class RateLimited(LLMError):
+    """The provider answered 429. `window` is "minute" (TPM/RPM) or "day" (TPD/RPD)."""
+
+    window = "minute"
+
+    def __init__(self, message: str, *, limit: str = "", retry_after: float | None = None,
+                 prompt_tokens: int | None = None) -> None:
+        super().__init__(message)
+        self.limit, self.retry_after, self.prompt_tokens = limit, retry_after, prompt_tokens
+
+
+class Busy(RateLimited):
+    """A per-minute limit (tokens or requests per minute) that a retry after waiting didn't clear."""
+
+
+class QuotaExceeded(RateLimited):
+    """A per-day limit: the free tier's daily tokens or requests are used up."""
+
+    window = "day"
+
+
+def estimate_tokens(messages: list[dict[str, str]] | str) -> int:
+    """Rough prompt size: ~4 characters per token for English text. Good enough for budgets and logs."""
+    text = messages if isinstance(messages, str) else "".join(m.get("content", "") for m in messages)
+    return (len(text) + 3) // 4
+
+
+LIMIT_NAME = re.compile(r"\((TPM|RPM|TPD|RPD|ASH|ASD)\)|\b(tokens|requests) per (minute|day)\b", re.IGNORECASE)
+TRY_AGAIN = re.compile(r"try again in\s+(?:(\d+)m)?\s*(\d+(?:\.\d+)?)\s*(ms|s)?", re.IGNORECASE)
+
+
+def classify_rate_limit(text: str, headers: Any = None) -> tuple[str, str, float | None]:
+    """(window, limit, retry_after_seconds) from a 429's error text and headers.
+
+    Groq's message names the limit: "Rate limit reached … on tokens per minute (TPM): Limit 8000 …
+    Please try again in 7.5s". The retry-after header is used when the text has no wait time.
+    Unknown limits count as per-minute when the wait is a minute or less, else per-day.
+    """
+    headers = headers or {}
+    m = LIMIT_NAME.search(text)
+    limit = ""
+    if m and m.group(1):
+        limit = m.group(1).upper()
+    elif m:
+        limit = ("T" if m.group(2).lower() == "tokens" else "R") + "P" + m.group(3)[0].upper()
+    retry_after: float | None = None
+    t = TRY_AGAIN.search(text)
+    if t:
+        secs = float(t.group(2)) / (1000 if (t.group(3) or "s").lower() == "ms" else 1)
+        retry_after = int(t.group(1) or 0) * 60 + secs
+    else:
+        try:
+            retry_after = float(headers.get("retry-after"))
+        except (TypeError, ValueError):
+            retry_after = None
+    if limit.endswith("D"):
+        window = "day"
+    elif limit.endswith("M"):
+        window = "minute"
+    else:
+        window = "minute" if retry_after is not None and retry_after <= 60 else "day"
+    return window, limit, retry_after
 
 
 class LLM(Protocol):
@@ -130,8 +195,10 @@ class GroqClient:
     """Groq's OpenAI-style chat API through the official `groq` SDK.
 
     The SDK's own retries are turned off (max_retries=0) so the behaviour is
-    explicit: a timeout is retried once after a short backoff, a 429 becomes
-    QuotaExceeded straight away (retrying would only burn more quota).
+    explicit: a timeout is retried once after a short backoff. A 429 is read to
+    see which limit was hit: a per-minute limit (TPM/RPM) is waited out (at most
+    20 s) and retried once, then becomes Busy; a per-day limit (TPD/RPD) becomes
+    QuotaExceeded straight away, since retrying would only burn more quota.
     """
 
     provider = "groq"
@@ -139,9 +206,11 @@ class GroqClient:
     HEALTH_TTL = 60.0  # seconds; health is polled, model listing is not free of rate limits
 
     def __init__(self, api_key: str, model: str, *, temperature: float = 0.1, max_tokens: int = 700,
-                 timeout: float = 30.0, backoff: float = 1.5, client: Any = None) -> None:
+                 timeout: float = 30.0, backoff: float = 1.5, client: Any = None,
+                 max_rate_wait: float = MAX_RATE_WAIT, sleep: Callable[[float], None] = time.sleep) -> None:
         self.api_key, self.model = api_key, model
         self.temperature, self.max_tokens, self.timeout, self.backoff = temperature, max_tokens, timeout, backoff
+        self.max_rate_wait, self.sleep = max_rate_wait, sleep
         self._client = client
         self._health: tuple[float, dict[str, Any]] | None = None
 
@@ -155,18 +224,38 @@ class GroqClient:
             self._client = Groq(api_key=self.api_key, timeout=self.timeout, max_retries=0)
         return self._client
 
-    def _call(self, fn: Callable[[], T]) -> T:
-        """Run one SDK call with the error mapping and the single timeout retry."""
+    def _rate_limit(self, e: Any, prompt_tokens: int | None) -> RateLimited:
+        """Turn a groq.RateLimitError into Busy or QuotaExceeded, and log which limit was hit."""
+        body = getattr(e, "body", None)
+        text = f"{e} {json.dumps(body) if isinstance(body, dict | list) else body or ''}"
+        response = getattr(e, "response", None)
+        window, limit, retry_after = classify_rate_limit(text, getattr(response, "headers", None))
+        log.warning("Groq rate limit: window=%s limit=%s retry_after=%s prompt_tokens=%s model=%s",
+                    window, limit or "unknown", retry_after, prompt_tokens, self.model)
+        kind = QuotaExceeded if window == "day" else Busy
+        return kind(QUOTA_MESSAGE if window == "day" else BUSY_MESSAGE, limit=limit, retry_after=retry_after,
+                    prompt_tokens=prompt_tokens)
+
+    def _call(self, fn: Callable[[], T], prompt_tokens: int | None = None) -> T:
+        """Run one SDK call with the error mapping, the single timeout retry and the single rate-limit retry."""
         import groq
 
-        for attempt in (1, 2):
+        timeouts = waits = 0
+        while True:
             try:
                 return fn()
             except groq.RateLimitError as e:
-                raise QuotaExceeded(QUOTA_MESSAGE) from e
+                err = self._rate_limit(e, prompt_tokens)
+                if isinstance(err, Busy) and waits == 0:
+                    waits += 1
+                    self.sleep(min(err.retry_after if err.retry_after is not None else self.max_rate_wait,
+                                   self.max_rate_wait))
+                    continue
+                raise err from e
             except groq.APITimeoutError as e:
-                if attempt == 1:
-                    time.sleep(self.backoff)
+                timeouts += 1
+                if timeouts == 1:
+                    self.sleep(self.backoff)
                     continue
                 raise LLMError("Groq timed out twice. Try again in a moment.") from e
             except groq.AuthenticationError as e:
@@ -177,7 +266,6 @@ class GroqClient:
                 raise LLMError("Can't reach the Groq API (network error).") from e
             except groq.APIError as e:
                 raise LLMError(f"Groq error: {str(e)[:200]}") from e
-        raise LLMError("unreachable")  # pragma: no cover
 
     def _params(self, messages: list[dict[str, str]], **extra: Any) -> dict[str, Any]:
         if not self.model:
@@ -189,7 +277,7 @@ class GroqClient:
         """Full reply. JSON mode uses Groq's `response_format` (the prompt must mention JSON, ours do)."""
         extra = {"response_format": {"type": "json_object"}} if json_mode else {}
         params = self._params(messages, **extra)
-        resp = self._call(lambda: self.client.chat.completions.create(**params))
+        resp = self._call(lambda: self.client.chat.completions.create(**params), estimate_tokens(messages))
         return resp.choices[0].message.content or ""
 
     def stream(self, messages: list[dict[str, str]]) -> Iterator[str]:
@@ -197,14 +285,14 @@ class GroqClient:
         import groq
 
         params = self._params(messages, stream=True)
-        chunks = self._call(lambda: self.client.chat.completions.create(**params))
+        chunks = self._call(lambda: self.client.chat.completions.create(**params), estimate_tokens(messages))
         try:
             for chunk in chunks:
                 token = chunk.choices[0].delta.content if chunk.choices else None
                 if token:
                     yield token
         except groq.RateLimitError as e:
-            raise QuotaExceeded(QUOTA_MESSAGE) from e
+            raise self._rate_limit(e, estimate_tokens(messages)) from e
         except groq.APIError as e:
             raise LLMError(f"Groq stream interrupted: {str(e)[:120]}") from e
 
@@ -227,7 +315,7 @@ class GroqClient:
                 issues.append("GROQ_MODEL is not set. Pick one with: python -m app.list_models")
             elif self.model not in models:
                 issues.append(f"GROQ_MODEL '{self.model}' is not available to this key. Run: python -m app.list_models")
-        except QuotaExceeded:
+        except RateLimited:
             pass  # the key works; it's just busy
         except LLMError as e:
             issues.append(str(e))

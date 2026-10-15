@@ -78,6 +78,8 @@ class ChatResponse(BaseModel):
     latency_ms: int = 0
     # Set only when true: the provider's free quota is used up / the answer came from the cache.
     quota_exceeded: bool | None = None
+    # Set only when the provider refused for a rate limit: "minute" (busy, retry soon) or "day".
+    rate_limited: Literal["minute", "day"] | None = None
     cached: bool | None = None
 
 
