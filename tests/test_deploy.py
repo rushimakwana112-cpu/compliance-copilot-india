@@ -165,7 +165,7 @@ def test_no_secret_in_git_history():
 def test_public_readme_and_deploy_guide():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     top = readme.split("## How it works")[0]
-    assert "LIVE_URL_HERE" in top and "render.com/deploy?repo=" in top and top.count("\n1. ") + top.count("\n2. ") >= 2
+    assert "**Live demo:** https://" in top and "render.com/deploy?repo=" in top and top.count("\n1. ") + top.count("\n2. ") >= 2
     for section in ("## How it works", "```mermaid", "## Sources used", "## Evaluation", "<!-- eval-results:start",
                     "## Known free-tier limits", "## Not legal advice", "## Run it locally (Windows PowerShell)"):
         assert section in readme, section

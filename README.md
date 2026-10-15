@@ -2,7 +2,7 @@
 
 **Ask Indian payroll and labour-law questions and get answers cited to the official Gazette and India Code documents.**
 
-**Live demo:** LIVE_URL_HERE
+**Live demo:** https://compliance-copilot-pykf.onrender.com (free server: the first visit after 15 idle minutes takes up to a minute to wake up)
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/rushimakwana112-cpu/compliance-copilot-india)
 

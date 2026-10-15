@@ -21,4 +21,4 @@ No ingestion is needed: Pinecone already holds the indexed documents.
    - *Is overtime paid at a higher rate than ordinary wages?*
 
    Each answer should cite the Code with a section and page. The upload and link boxes should not be visible.
-7. **Paste the live URL back to Claude** in the project thread, so the README's `LIVE_URL_HERE` gets replaced.
+7. **Paste the live URL back to Claude** in the project thread, so the README's "Live demo" link points to it.
