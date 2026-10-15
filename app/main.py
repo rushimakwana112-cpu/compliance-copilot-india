@@ -16,13 +16,14 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from app import catalog, logs, pipeline, tools
 from app.config import DATA_DIR, FRONTEND_DIR
 from app.jurisdiction import is_known_state, load_states
-from app.limits import limit_message
+from app.limits import RateLimiter, limit_message
 from app.schemas import (
-    ChatRequest, ChatResponse, DocumentOut, Feedback, Health, IngestAccepted, IngestUrl, StateOut,
+    MAX_MESSAGE_CHARS, ChatRequest, ChatResponse, DocumentOut, Feedback, Health, IngestAccepted, IngestUrl, StateOut,
 )
 from app.services import Services, build_services
 
 UPLOAD_DIR = DATA_DIR / "raw" / "uploads"
+FEEDBACK_ANSWER_CHARS = 4000  # what a feedback log line keeps of the answer
 log = logging.getLogger("app")
 PUBLIC_INGEST_OFF = ("Adding documents is turned off on the public demo. "
                      "Run Compliance Copilot on your own computer to index your own PDFs (see the README).")
@@ -147,13 +148,24 @@ def create_app(services: Services | None = None) -> FastAPI:
         return StreamingResponse(events(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
-    @app.post("/api/feedback")
-    def feedback(fb: Feedback) -> dict[str, bool]:
+    feedback_limiter: list[RateLimiter] = []  # its own budget, so rating answers doesn't use up chats
+
+    @app.post("/api/feedback", response_model=None)
+    def feedback(fb: Feedback, request: Request) -> dict[str, bool] | JSONResponse:
+        """Log a thumbs up/down. In public mode it is rate limited and every logged field is capped,
+        because each call appends to a file on the server's disk."""
+        s = svc().settings
+        if s.public_mode:
+            if not feedback_limiter:
+                feedback_limiter.append(RateLimiter(s.rate_limit_per_min, s.rate_limit_per_day))
+            verdict = feedback_limiter[0].hit(client_ip(request, behind_proxy=True))
+            if not verdict.allowed:
+                return JSONResponse({"ok": False}, status_code=429, headers={"Retry-After": str(verdict.retry_after)})
         a = fb.answer
-        answer_text = a.get("answer", "") if isinstance(a, dict) else str(a or "")
-        question = fb.question or (a.get("question", "") if isinstance(a, dict) else "")
+        answer_text = str(a.get("answer", "") if isinstance(a, dict) else a or "")[:FEEDBACK_ANSWER_CHARS]
+        question = str(fb.question or (a.get("question", "") if isinstance(a, dict) else ""))[:MAX_MESSAGE_CHARS]
         logs.append("feedback", {"question": question, "answer": answer_text, "value": fb.value,
-                                 "type": a.get("type") if isinstance(a, dict) else None})
+                                 "type": str(a.get("type"))[:20] if isinstance(a, dict) and a.get("type") else None})
         return {"ok": True}
 
     def _index_in_background(path: Path, meta: dict[str, str]) -> None:

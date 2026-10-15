@@ -148,3 +148,16 @@ def test_message_and_history_limits(services):
     history = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"} for i in range(20)]
     req = ChatRequest(message="and for Kerala?", history=history)
     assert len(req.history) == 8 and req.history[-1].content == "m19"
+
+
+def test_feedback_is_capped_and_rate_limited_in_public_mode(public, services, tmp_path):
+    """One feedback call used to append 9 MB to logs/feedback.jsonl, with no limit on how often."""
+    public.rate_limit_per_min = 2
+    huge = {"value": "up", "question": "q" * 2_000_000, "answer": {"type": "rag" * 1000, "answer": "a" * 2_000_000}}
+    with TestClient(create_app(services)) as c:
+        codes = [c.post("/api/feedback", json=huge).status_code for _ in range(3)]
+        chat = c.post("/api/chat", json={"message": "hello there"})
+    assert codes == [200, 200, 429]
+    assert chat.status_code == 200  # feedback has its own budget: rating answers doesn't use up questions
+    lines = (tmp_path / "logs" / "feedback.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2 and all(len(line) < 6000 for line in lines)

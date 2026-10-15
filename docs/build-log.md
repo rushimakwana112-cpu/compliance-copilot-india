@@ -251,3 +251,17 @@ Not covered: DNS rebinding (a host that resolves to a public IP when checked and
 Also checked, no change: the 5 trick questions in the real baseline eval were all refused and no real question was wrongly refused (precision and recall 100%); citation numbers that don't match a passage are removed and only cited passages are listed. One known gap kept as designed: an answer with no `[n]` markers at all lists every passage as its source.
 
 **What to learn:** in RAG, retrieved text goes straight into the prompt, so anyone who can get a document into your index can talk to your model ("indirect prompt injection"). Say plainly that retrieved text is data, keep the strict "answer only from passages" rules, and never let the model's output act on anything (links, tools) without code checking it.
+
+## Audit fix 5: the feedback button could fill the server's disk (16 Oct 2026)
+
+**Bug (medium on the public site):** `POST /api/feedback` had no rate limit and no length caps, even with PUBLIC_MODE on, and every call appends to `logs/feedback.jsonl`. One request with a 5 MB question and a 5 MB answer added 9 MB to the file. **Fix:** in public mode feedback has its own per-IP limiter (same numbers as chat, so rating answers doesn't use up questions), and the logged question, answer and type are cut to 1,000, 4,000 and 20 characters. Test: `test_feedback_is_capped_and_rate_limited_in_public_mode`.
+
+Also checked, no change needed:
+- **XSS:** hostile `<img onerror>`, `<svg onload>` and `<script>` in the answer, note, table, citations, document names and scope were all shown as text; `javascript:` links were not made clickable; a quote inside a URL stayed inside the `href`.
+- **Secrets:** no key in tracked files or git history; `.env` and `logs/*.jsonl` are git-ignored; neither key appears in any local log; `/api/health` contains no key.
+- **What `logs/chats.jsonl` stores:** the question as typed, the rewritten question, scope, route, retrieval scores, token count and latency. No IP address and no answer text. Users may still type personal details into a question, so treat this file as personal data and don't commit or share it.
+- **CORS:** no CORS middleware, so other websites can't call the API from a browser. The page is served from the same origin, so it doesn't need CORS.
+
+Known limitation, not changed: the rate limiter reads the client IP from the *first* `X-Forwarded-For` entry, which the caller can set, so a script can dodge the per-IP limit (the build log already said so in Phase 2). The right fix is to take the entry added by Render's proxy, but which position that is depends on how many proxies Render puts in front. Taking the wrong one would put all users in one bucket, so this needs checking on Render first.
+
+**What to learn:** every endpoint that writes something (a file, a database row) is a way to use up your storage, not just the expensive ones. Give each public write endpoint a size limit and a rate limit, and keep separate budgets for separate actions so one doesn't starve the other.
