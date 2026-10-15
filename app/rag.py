@@ -9,6 +9,7 @@ model is most likely to make something up, so we refuse instead.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -22,7 +23,9 @@ from app.vectorstore import scope_filter
 
 DOC_TYPE_BOOST = 0.03
 SNIPPET_CHARS = 320
+NEIGHBOUR_CHARS = 900  # how much of the previous / next chunk is added around each passage
 NOT_FOUND = "NOT_FOUND"
+log = logging.getLogger("app")
 
 # Words that hint which kind of document answers the question best.
 DOC_TYPE_HINTS = {
@@ -82,11 +85,19 @@ class Trace:
         }
 
 
+def as_int(value: Any) -> int | None:
+    """Pinecone returns numbers as floats (40.0); pages and chunk numbers are whole numbers."""
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
 @dataclass
 class Passage:
     doc: str
     section: str
-    page: str
+    page: int | None
     score: float  # raw similarity from Pinecone
     rank_score: float  # score + boosts, used only for ordering
     text: str
@@ -95,10 +106,16 @@ class Passage:
     effective_date: str
     doc_type: str
     scope: str
+    chunk_no: int | None = None
+    chapter: str = ""
+    heading: str = ""
+    term: str = ""
+    context: str = ""  # text sent to the model: the chunk plus the end of the previous and start of the next
 
     def citation(self) -> Citation:
+        """Citations always point at the main chunk, not at the neighbours added for context."""
         snippet = self.text if len(self.text) <= SNIPPET_CHARS else self.text[:SNIPPET_CHARS].rsplit(" ", 1)[0] + "…"
-        return Citation(doc=self.doc, section=self.section, page=str(self.page), score=round(self.score, 3),
+        return Citation(doc=self.doc, section=self.section, page=self.page, score=round(self.score, 3),
                         snippet=snippet, url=self.url, status=self.status)
 
 
@@ -141,11 +158,57 @@ def wanted_doc_types(question: str) -> set[str]:
 def _passage(meta: dict, score: float, boost_types: set[str]) -> Passage:
     doc_type = str(meta.get("doc_type", ""))
     return Passage(
-        doc=str(meta.get("doc", "")), section=str(meta.get("section", "")), page=str(meta.get("page", "")),
+        doc=str(meta.get("doc", "")), section=str(meta.get("section", "")), page=as_int(meta.get("page")),
         score=score, rank_score=score + (DOC_TYPE_BOOST if doc_type in boost_types else 0.0),
         text=str(meta.get("text", "")), url=str(meta.get("source_url", "")), status=str(meta.get("status", "current")),
         effective_date=str(meta.get("effective_date", "")), doc_type=doc_type, scope=str(meta.get("scope", "")),
+        chunk_no=as_int(meta.get("chunk_no")), chapter=str(meta.get("chapter", "") or ""),
+        heading=str(meta.get("heading", "") or ""), term=str(meta.get("term", "") or ""),
     )
+
+
+def _strip_overlap(text: str) -> str:
+    """Drop the '… <end of previous chunk>' line that chunking puts at the start of a chunk."""
+    return text.split("\n", 1)[1] if text.startswith("… ") and "\n" in text else text
+
+
+def expand_neighbours(services: Services, question: str, passages: list[Passage]) -> None:
+    """Fill `context` with the end of the previous and the start of the next chunk of the same doc and section.
+
+    One filtered search per (doc, section) finds the neighbours by `chunk_no`. A failure here only
+    loses context, so it is logged and the passages are used on their own.
+    """
+    wanted: dict[tuple[str, str], set[int]] = {}
+    for p in passages:
+        if p.chunk_no is not None:
+            wanted.setdefault((p.doc, p.section), set()).update({p.chunk_no - 1, p.chunk_no + 1})
+    found: dict[tuple[str, str, int], str] = {}
+    for (doc, section), numbers in wanted.items():
+        nums = sorted(n for n in numbers if n >= 0)
+        if not nums or services.store is None:
+            continue
+        flt = {"doc": doc, "section": section, "chunk_no": {"$in": nums}}
+        try:
+            matches = services.store.search(question, len(nums), flt)
+        except Exception as e:  # noqa: BLE001 — neighbours are a bonus, never a failure
+            log.warning("Neighbour lookup failed for %s / %s: %s", doc, section, e)
+            continue
+        for m in matches:
+            n = as_int(m.metadata.get("chunk_no"))
+            if n is not None:
+                found[(doc, section, n)] = str(m.metadata.get("text", ""))
+    for p in passages:
+        prev = found.get((p.doc, p.section, p.chunk_no - 1), "") if p.chunk_no is not None else ""
+        nxt = found.get((p.doc, p.section, p.chunk_no + 1), "") if p.chunk_no is not None else ""
+        parts = []
+        if prev:
+            tail = _strip_overlap(prev)[-NEIGHBOUR_CHARS:]
+            parts.append("… " + (tail.split(" ", 1)[1] if " " in tail else tail))
+        parts.append(_strip_overlap(p.text) if prev else p.text)
+        if nxt:
+            head = _strip_overlap(nxt)[:NEIGHBOUR_CHARS]
+            parts.append((head.rsplit(" ", 1)[0] if " " in head else head) + " …")
+        p.context = "\n".join(parts)
 
 
 def retrieve(services: Services, question: str, scope: Scope, trace: Trace | None = None) -> list[Passage]:
@@ -205,7 +268,7 @@ def build_messages(question: str, passages: list[Passage], scope: Scope) -> list
                                       f"effective {p.effective_date}" if p.effective_date else "",
                                       "Central" if p.scope == "central" else p.scope.title(),
                                       "REPEALED" if p.status != "current" else "") if x)
-        blocks.append(f"[{i}] {head}\n{p.text}")
+        blocks.append(f"[{i}] {head}\n{p.context or p.text}")
     system = SYSTEM_PROMPT + f"\nJurisdiction searched: {scope.label()}."
     if len(scope.states) > 1:
         system += "\n" + COMPARE_RULE.format(states=", ".join(scope.label().split(" + ")[1:]))
@@ -273,6 +336,7 @@ def prepare(services: Services, question: str, scope: Scope,
     best = max((p.score for p in passages), default=None)
     if best is None or best < services.settings.score_threshold:
         return passages, not_found(scope, best)
+    expand_neighbours(services, question, passages)
     return passages, None
 
 

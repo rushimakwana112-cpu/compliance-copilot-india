@@ -49,7 +49,7 @@ class ScopeOut(BaseModel):
 class Citation(BaseModel):
     doc: str
     section: str = ""
-    page: str = ""
+    page: int | None = None  # a whole page number; None when the source has no page (calculators)
     # None for calculator citations, which are not similarity matches.
     score: float | None = None
     snippet: str = ""

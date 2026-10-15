@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from app import rag
@@ -127,3 +129,58 @@ def test_stream_tokens_join_to_answer(services, store, llm):
     events = list(rag.stream(services, "gratuity fixed term employee", Scope(["gujarat"], "default")))
     tokens = "".join(v for k, v in events if k == "token")
     assert tokens == "Yes. Fixed-term employees qualify [1]." and events[-1][1].type == "rag"
+
+
+# ----------------------------------------------------------------- neighbours, boosts, pages
+def seed_sections(store):
+    texts = ["Nomination forms are kept by the employer for the record.",
+             "The employer shall pay gratuity within thirty days of it becoming payable.",
+             "Gratuity is payable to a fixed term employee on completion of the contract period.",
+             "Interest is payable on delayed gratuity from the date it became payable.",
+             "Disputes about gratuity go to the controlling authority."]
+    for n, t in enumerate(texts):
+        store.add(t, doc="Code on Social Security, 2020", section="Section 53 · Payment of gratuity", page=40.0 + n,
+                  chunk_no=n, scope="central", status="current", doc_type="act",
+                  chapter="Chapter V — Gratuity", heading="Payment of gratuity")
+    store.add("Gratuity eligibility explained for fixed term employee", doc="Ministry FAQs", section="FAQ 3", page=2,
+              chunk_no=0, scope="central", status="current", doc_type="faq")
+
+
+def test_neighbour_expansion_merges_previous_and_next_chunk(services, store, llm):
+    seed_sections(store)
+    services.settings.keep_k = 1
+    llm.responder = lambda m, j: "Yes, fixed term employees get gratuity [1]."
+    resp, passages = rag.answer(services, "Gratuity is payable to a fixed term employee on completion of the contract period",
+                                Scope(["gujarat"], "default"))
+    main = passages[0]
+    assert main.chunk_no == 2 and main.page == 42
+    assert "within thirty days" in main.context and "Interest is payable on delayed" in main.context
+    assert "Nomination forms" not in main.context and "controlling authority" not in main.context  # only ±1
+    prompt = llm.calls[-1][1]["content"]
+    assert "within thirty days" in prompt and "Interest is payable" in prompt
+    cite = resp.citations[0]
+    assert cite.page == 42 and "thirty days" not in cite.snippet and "fixed term employee" in cite.snippet
+
+
+def test_neighbour_lookup_failure_keeps_the_answer(services, store, llm):
+    seed_sections(store)
+    real = store.search
+
+    def flaky(text, top_k, filter):
+        if "chunk_no" in filter:
+            raise ConnectionError("down")
+        return real(text, top_k, filter)
+
+    store.search = flaky
+    llm.responder = lambda m, j: "Yes [1]."
+    resp, passages = rag.answer(services, "gratuity fixed term employee contract period", Scope(["gujarat"], "default"))
+    assert resp.type == "rag" and passages[0].context == passages[0].text
+
+
+def test_pages_are_ints_in_citations(services, store, llm):
+    seed_sections(store)
+    llm.responder = lambda m, j: "Yes [1]."
+    resp, _ = rag.answer(services, "gratuity fixed term employee", Scope(["gujarat"], "default"))
+    assert all(type(c.page) is int for c in resp.citations)
+    prompt = llm.calls[-1][1]["content"]
+    assert re.search(r"p\. 4\d ·", prompt) and not re.search(r"p\. \d+\.0", prompt)

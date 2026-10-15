@@ -84,7 +84,7 @@ def _cite(*rates_used: Rate) -> list[Citation]:
     for r in rates_used:
         if r.source_doc and r.source_doc not in seen:
             note = f"Effective {r.effective_date}" if r.effective_date else ""
-            seen[r.source_doc] = Citation(doc=r.source_doc, section=r.section, page="", score=None, snippet=note, url=r.url)
+            seen[r.source_doc] = Citation(doc=r.source_doc, section=r.section, page=None, score=None, snippet=note, url=r.url)
     return list(seen.values())
 
 
