@@ -304,8 +304,9 @@ def test_retrieval_fetches_top_k_and_keeps_keep_k(services, store):
     real = store.search
     store.search = lambda text, top_k, filter: asked.append(top_k) or real(text, top_k, filter)
     services.settings.top_k, services.settings.keep_k = 12, 5
-    passages = rag.retrieve(services, "gratuity fixed term employee", Scope(["gujarat"], "default"))
-    assert asked == [12] and len(passages) == 5
+    trace = rag.Trace()
+    passages = rag.retrieve(services, "gratuity fixed term employee", Scope(["gujarat"], "default"), trace)
+    assert asked == [12] * (1 + len(trace.variants)) and len(passages) == 5  # the question + its expansions
 
 
 # ----------------------------------------------------------------- defined terms are pinned
@@ -370,7 +371,8 @@ def seed_commentary(store):
               scope="central", status="commentary", doc_type="act", chunk_no=9)
 
 
-def test_commentary_is_searched_but_ranked_below_operative_text(services, store):
+def test_commentary_is_searched_but_ranked_below_operative_text(services, store, monkeypatch):
+    monkeypatch.setattr(rag, "expand_query", lambda q: [])  # compare raw scores of the question alone
     seed_commentary(store)
     question = "gratuity fixed term employee salient feature"
     passages = rag.retrieve(services, question, Scope(["gujarat"], "default"))
@@ -416,3 +418,39 @@ def test_streamed_answer_is_renumbered_in_done(services, store, llm):
     events = list(rag.stream(services, "gratuity for fixed term employee", Scope(["gujarat"], "default")))
     done = dict(events)["done"]
     assert done.answer == "Yes [1]." and len(done.citations) == 1 and done.other_citations
+
+
+# ----------------------------------------------------------------- query expansion
+def test_expand_query_uses_the_laws_words():
+    variants = rag.expand_query("Is bonus paid to contract workers too?")
+    assert variants[0] == "Is bonus paid to contract labour too?"
+    assert "contractor" in variants[1] and "Code on Wages bonus chapter" in variants[1] and len(variants) == 2
+    assert rag.expand_query("What is the definition of wages?") == []
+    assert "provident fund" in rag.expand_query("When is PF due?")[0]
+    assert "minimum rate of wages" in rag.expand_query("What is the minimum wage in Gujarat?")[0]
+    assert rag.expand_query("Is the ESI rate the same?")[0].startswith("Is the employees' state insurance rate")
+
+
+def test_expansion_finds_the_passage_the_question_misses(services, store, llm):
+    """q07: the Act says 'contract labour', the user says 'contract workers'."""
+    store.add("bonus contract labour employed through a contractor shall be paid by the contractor",
+              doc="Code on Wages, 2019", section="Section 26", page=20, chunk_no=3, scope="central",
+              status="current", doc_type="act")
+    store.add("workers too paid on time", doc="Unrelated FAQ", page=1, scope="central", status="current", doc_type="faq")
+    q = "Is bonus paid to contract workers too?"
+    plain = max(m.score for m in store.search(q, 12, {}) if m.metadata["doc"] == "Code on Wages, 2019")
+    trace = rag.Trace()
+    passages = rag.retrieve(services, q, Scope(["gujarat"], "default"), trace)
+    best = next(p for p in passages if p.doc == "Code on Wages, 2019")
+    assert best.score > plain  # the variant in the law's words scores higher than the question did
+    assert len(trace.variants) == 2 and trace.log_fields()["query_variants"] == trace.variants
+    assert len({p.chunk_no for p in passages if p.doc == "Code on Wages, 2019"}) == 1  # merged, not duplicated
+
+
+def test_expansion_stays_within_the_token_budget(services, store, llm):
+    for n in range(7):
+        store.add("bonus contract labour " + " ".join(f"w{n}x{i}" for i in range(400)), doc="Code on Wages, 2019",
+                  section="Section 26", page=20 + n, chunk_no=n, scope="central", status="current", doc_type="act")
+    llm.responder = lambda m, j: "Yes [1]."
+    _, passages = rag.answer(services, "Is bonus paid to contract workers too?", Scope(["gujarat"], "default"))
+    assert rag.context_tokens(passages) <= services.settings.context_token_budget

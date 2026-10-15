@@ -13,8 +13,13 @@ import logging
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
+import yaml
+
+from app.config import DATA_DIR
 from app.jurisdiction import Scope
 from app.llm import LLM, LLMError, estimate_tokens
 from app.schemas import Citation, ChatResponse, ScopeOut, Turn
@@ -74,6 +79,7 @@ class Trace:
     prompt_tokens: int | None = None  # estimated size of the answer prompt (chars / 4)
     dropped: int = 0  # passages dropped to fit the token budget
     rate_limit: dict[str, Any] | None = None  # which provider limit refused the request
+    variants: list[str] = field(default_factory=list)  # expanded queries searched besides the question
 
     def add(self, mid: str, score: float, meta: dict[str, Any]) -> None:
         old = self.matches.get(mid)
@@ -94,6 +100,7 @@ class Trace:
             "prompt_tokens": self.prompt_tokens,
             "dropped_passages": self.dropped,
             "rate_limit": self.rate_limit,
+            "query_variants": self.variants,
         }
 
 
@@ -353,6 +360,54 @@ def expand_neighbours(services: Services, question: str, passages: list[Passage]
         p.context = "\n".join(parts)
 
 
+# ----------------------------------------------------------------- query expansion
+EXPANSION_PATH = DATA_DIR / "query_expansion.yaml"
+MAX_VARIANTS = 2
+
+
+@lru_cache
+def load_expansions(path: Path = EXPANSION_PATH) -> list[dict[str, list[str]]]:
+    if not path.exists():
+        return []
+    return [{k: list(e.get(k) or []) for k in ("terms", "synonyms", "topics")}
+            for e in yaml.safe_load(path.read_text(encoding="utf-8")) or []]
+
+
+def _term_pattern(term: str) -> re.Pattern[str]:
+    return re.compile(r"\b" + r"\s+".join(map(re.escape, term.split())) + r"s?\b", re.IGNORECASE)
+
+
+def expand_query(question: str, entries: list[dict[str, list[str]]] | None = None) -> list[str]:
+    """Up to 2 extra queries in the law's own words, e.g. for 'Is bonus paid to contract workers?':
+    'Is bonus paid to contract labour?' and the question plus 'contract labour contractor payment of bonus …'.
+    Empty when no term of data/query_expansion.yaml appears in the question."""
+    entries = load_expansions() if entries is None else entries
+    swapped, extra = question, []
+    for e in entries:
+        hit = next((t for t in sorted(e["terms"], key=len, reverse=True) if _term_pattern(t).search(question)), None)
+        if hit is None:
+            continue
+        if e["synonyms"]:
+            swapped = _term_pattern(hit).sub(e["synonyms"][0], swapped, count=1)
+        extra += [x for x in e["synonyms"] + e["topics"] if x.lower() not in question.lower()]
+    variants = []
+    if swapped != question:
+        variants.append(swapped)
+    if extra:
+        variants.append(f"{question} {' '.join(dict.fromkeys(extra))}")
+    return [v for v in dict.fromkeys(variants) if v != question][:MAX_VARIANTS]
+
+
+def _search_all(services: Services, queries: list[str], top_k: int, flt: dict[str, Any]) -> list[Any]:
+    """Search every query and merge: one entry per passage id, with its best score."""
+    best: dict[str, Any] = {}
+    for q in queries:
+        for m in services.store.search(q, top_k, flt):  # type: ignore[union-attr]
+            if m.id not in best or m.score > best[m.id].score:
+                best[m.id] = m
+    return sorted(best.values(), key=lambda m: m.score, reverse=True)
+
+
 def retrieve(services: Services, question: str, scope: Scope, trace: Trace | None = None) -> list[Passage]:
     """Top passages for `question`. For a comparison, each state gets its own retrieval so neither is crowded out.
 
@@ -369,11 +424,12 @@ def retrieve(services: Services, question: str, scope: Scope, trace: Trace | Non
     per_state_keep = s.keep_k if len(scope.states) == 1 else max(2, s.keep_k - 2)
     kept: dict[tuple, Passage] = {}
     trace.searched = True
+    trace.variants = expand_query(question)
     for state in scope.states:
         flt = scope_filter([state], statuses)
         trace.filters.append(flt)
         try:
-            matches = services.store.search(question, s.top_k, flt)
+            matches = _search_all(services, [question, *trace.variants], s.top_k, flt)
         except Exception as e:  # network, auth, quota or a bad filter
             raise SearchError(f"{e.__class__.__name__}: {str(e)[:160]}") from e
         for m in matches:
