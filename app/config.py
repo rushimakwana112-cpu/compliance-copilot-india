@@ -20,7 +20,9 @@ LOGS_DIR = ROOT / "logs"
 FRONTEND_DIR = ROOT / "frontend"
 
 
-THRESHOLDS = {"pinecone": 0.47, "ollama": 0.55}  # llama-text-embed-v2 vs bge-m3
+# llama-text-embed-v2 vs bge-m3. The Pinecone default only blocks clear nonsense: real tests showed relevant
+# definitions scoring 0.43 and an off-topic question passing 0.47, so the model's NOT_FOUND is the real guard.
+THRESHOLDS = {"pinecone": 0.38, "ollama": 0.55}
 
 
 class Settings(BaseSettings):

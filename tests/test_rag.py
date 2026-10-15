@@ -236,7 +236,7 @@ def test_section_title_boost(services, store):
 def test_threshold_and_retrieval_defaults_per_embedding_mode():
     from app.config import Settings
 
-    assert Settings(_env_file=None).score_threshold == 0.47  # pinecone llama-text-embed-v2
+    assert Settings(_env_file=None).score_threshold == 0.38  # pinecone llama-text-embed-v2
     assert Settings(_env_file=None, embed_provider="ollama").score_threshold == 0.55  # bge-m3
     assert Settings(_env_file=None, score_threshold=0.6).score_threshold == 0.6  # explicit value wins
     s = Settings(_env_file=None)
