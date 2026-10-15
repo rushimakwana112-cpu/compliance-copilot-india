@@ -94,7 +94,7 @@ def test_publish_readiness():
     assert s.rate_limit_per_min > 0 and s.rate_limit_per_day > 0 and s.cache_size > 0
     ignored = [ln.strip() for ln in (ROOT / ".gitignore").read_text().splitlines()]
     assert ".env" in ignored
-    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
+    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.split()
     assert ".env" not in tracked and ".env.example" in tracked
     html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     assert "Waking up the server" in html and 'fetch(API_BASE + "/api/health"' in html
@@ -153,12 +153,12 @@ def test_health_check_path_answers_200_even_when_degraded(settings, llm):
 
 
 def test_no_secret_in_git_history():
-    log = subprocess.run(["git", "log", "--all", "-p"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    log = subprocess.run(["git", "log", "--all", "-p"], cwd=ROOT, capture_output=True, encoding="utf-8", errors="replace", check=True).stdout
     import re
 
     assert not re.search(r"gsk_[A-Za-z0-9]{20,}|pcsk_[A-Za-z0-9_]{20,}", log)
     files = subprocess.run(["git", "log", "--all", "--name-only", "--format="], cwd=ROOT,
-                           capture_output=True, text=True, check=True).stdout.split()
+                           capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.split()
     assert ".env" not in files
 
 
