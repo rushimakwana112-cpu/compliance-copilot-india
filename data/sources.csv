@@ -1,16 +1,8 @@
 # Official documents to index. One row per document. Lines starting with # are ignored.
 # scope: central | <state id from data/states.yaml>      status: current | repealed | historical
 # doc_type: act | rules | circular | notification | faq    effective_date: YYYY-MM-DD
-# TODO(Rushi): the 3 example rows below were NOT verified (the build machine could not reach .gov.in).
-#   Open each link in a browser first and replace it with the current official URL.
-#   Central:  labour.gov.in, indiacode.nic.in, egazette.gov.in, epfindia.gov.in, esic.gov.in, incometaxindia.gov.in
-#   Gujarat:  gujarat government sites (labour department, commercial tax for Professional Tax)
+# All URLs below were checked in a browser by Rushi (Oct 2026).
 url,doc,scope,status,effective_date,doc_type
-<<<<<<< Updated upstream
-https://labour.gov.in/sites/default/files/the_code_on_wages_2019_no._29_of_2019.pdf,"Code on Wages, 2019",central,current,2025-11-21,act
-https://labour.gov.in/sites/default/files/ss_code_gazette.pdf,"Code on Social Security, 2020",central,current,2025-11-21,act
-https://www.indiacode.nic.in/bitstream/123456789/1874/1/A1972-39.pdf,"Payment of Gratuity Act, 1972",central,repealed,1972-09-16,act
-=======
 https://www.indiacode.nic.in/bitstream/123456789/15793/1/aA2019-29.pdf,"Code on Wages, 2019",central,current,2025-11-21,act
 https://www.indiacode.nic.in/bitstream/123456789/16823/1/aA2020-36.pdf,"Code on Social Security, 2020",central,current,2025-11-21,act
 # https://www.indiacode.nic.in/bitstream/123456789/22040/1/aa202035.pdf,"Industrial Relations Code, 2020",central,current,2025-11-21,act
@@ -20,4 +12,3 @@ https://www.labour.gov.in/static/uploads/2026/09/2b0f1dbbd3769fc388416186ec14532
 https://www.labour.gov.in/static/uploads/2025/12/0fd090d29a4576739079a7b565c8ca9d.pdf,"Gazette: Implementation of Code on Wages, 2019",central,current,2025-11-21,notification
 https://www.labour.gov.in/static/uploads/2025/12/b602569a9cd014c49d91472b6a22b24c.pdf,"Gazette: Implementation of Code on Social Security, 2020",central,current,2025-11-21,notification
 https://www.labour.gov.in/static/uploads/2025/12/3db01976470a13d7b54b0e6e410d42b8.pdf,"Gazette: Implementation of Industrial Relations Code, 2020",central,current,2025-11-21,notification
->>>>>>> Stashed changes
