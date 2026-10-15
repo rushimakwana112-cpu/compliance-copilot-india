@@ -56,7 +56,7 @@ flowchart LR
 | `app/limits.py` | Public demo guards: per-IP rate limit and the answer cache |
 | `app/list_models.py` | `python -m app.list_models` prints the models your key can use |
 | `ingest/` | `download → parse → chunk → index`, run with `python -m ingest.run` |
-| `eval/` | 30 questions and the metrics runner |
+| `eval/` | 33 questions and the metrics runner |
 
 ## Two ways to run
 
