@@ -5,7 +5,7 @@ PowerShell:
     python -m eval.run --sweep 0.34,0.38,0.42,0.47   # also test refusal thresholds (retrieval only, no LLM)
 
 Metrics
-    route accuracy     the router picked the expected path (not_found questions are expected to route to rag)
+    route accuracy     the router picked the expected path (not_found questions: rag, or refused up front as out_of_scope)
     retrieval hit@4    the expected document is among the first 4 citations (rag questions)
     answer contains    the answer contains the expected phrase (any of a|b|c, case-insensitive)
     not_found prec.    of the answers that refused, how many were supposed to refuse
@@ -70,7 +70,7 @@ def score(row: Row, route: str, resp: ChatResponse) -> dict[str, bool | None]:
     expected_route = row.type if row.type in ("rag", "tool", "sql") else "rag"
     text = resp.answer + " " + " ".join(" ".join(r) for r in (resp.table.rows if resp.table else []))
     return {
-        "route": route == expected_route,
+        "route": route == expected_route or (row.type == "not_found" and route == "out_of_scope"),
         "hit@4": _any_in(row.expected_doc, " ".join(c.doc for c in resp.citations[:4]))
         if row.type == "rag" and row.expected_doc else None,
         "contains": _any_in(row.expected_answer_contains, text) if row.expected_answer_contains else None,

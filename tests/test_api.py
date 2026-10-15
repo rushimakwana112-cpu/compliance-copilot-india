@@ -79,13 +79,13 @@ def test_chat_rag_contract(services, store, llm):
 def test_chat_not_found_contract(client, store):
     store.add("Monthly professional tax slab table", doc="Gujarat PT schedule", page=1, scope="gujarat",
               status="current", doc_type="notification")
-    body = client.post("/api/chat", json={"message": "Gratuity rule in Dubai?"}).json()
+    body = client.post("/api/chat", json={"message": "Gratuity rule for astronauts?"}).json()
     assert body["type"] == "not_found" and body["citations"] == []
 
 
 def test_chat_search_failure_is_an_error_not_a_silent_not_found(client, store, caplog):
     # Empty index: 0 matches means a wrong index or filter, so it must not look like "not in my documents".
-    body = client.post("/api/chat", json={"message": "Gratuity rule in Dubai?"}).json()
+    body = client.post("/api/chat", json={"message": "Gratuity rule for astronauts?"}).json()
     assert body["type"] == "error" and body["answer"].startswith("Search failed: ")
     assert "0 matches" in body["answer"]
     assert any(r.levelname == "WARNING" and "Search failed" in r.getMessage() for r in caplog.records)
@@ -94,7 +94,7 @@ def test_chat_search_failure_is_an_error_not_a_silent_not_found(client, store, c
         raise ConnectionError("pinecone unreachable")
 
     store.search = boom
-    body = client.post("/api/chat/stream", json={"message": "Gratuity rule in Kerala?"}).text
+    body = client.post("/api/chat/stream", json={"message": "Gratuity rule in Kerala for astronauts?"}).text
     assert '"type": "error"' in body and "Search failed: ConnectionError: pinecone unreachable" in body
 
 
@@ -130,3 +130,12 @@ def test_ingest_file_shows_in_documents(client, act_pdf, monkeypatch, tmp_path):
     assert r.status_code == 200 and r.json()["name"] == "EPFO circular"
     docs = {d["name"]: d for d in client.get("/api/documents").json()}
     assert docs["EPFO circular"]["scope"] == "gujarat"  # indexed in the background by the time we ask
+
+
+@pytest.mark.parametrize("endpoint", ["/api/chat", "/api/chat/stream"])
+def test_foreign_place_is_refused_without_retrieval_or_llm(services, store, llm, endpoint):
+    store.add("gratuity rule for employees", doc="SS Code", page=1, scope="central", status="current", doc_type="act")
+    with TestClient(create_app(services)) as c:
+        r = c.post(endpoint, json={"message": "Gratuity rule in Dubai?"})
+    assert "I only cover Indian law" in r.text and "Dubai" in r.text and '"not_found"' in r.text
+    assert store.searches == [] and llm.calls == []

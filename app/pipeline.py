@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app import logs, rag, sql_agent, tools
-from app.jurisdiction import Scope, detect_states, resolve
+from app.jurisdiction import Scope, detect_states, foreign_place, resolve
 from app.llm import QUOTA_MESSAGE, LLMError, QuotaExceeded
 from app.router import route
 from app.schemas import ChatRequest, ChatResponse, ScopeOut
@@ -44,6 +44,21 @@ def plan(services: Services, req: ChatRequest) -> Turn:
         # "and the PT there?" → the rewritten question carries the state from earlier turns
         scope = resolve(question, j.mode, j.state)
     return Turn(req.message, question, scope, route(question, s.router, services.llm), rag.Trace(index=s.pinecone_index))
+
+
+def out_of_scope(services: Services, req: ChatRequest) -> tuple[Turn, ChatResponse] | None:
+    """A question naming a foreign place is refused at once: no retrieval, no model call."""
+    place = foreign_place(req.message)
+    if place is None:
+        return None
+    j = req.jurisdiction
+    scope = resolve(req.message, j.mode, j.state)
+    turn = Turn(req.message, req.message, scope, "out_of_scope", rag.Trace(index=services.settings.pinecone_index))
+    return turn, ChatResponse(
+        type="not_found", scope=_scope_out(scope), note=f"Out of scope: the question names {place}.",
+        answer=f"I only cover Indian law: central labour and payroll law plus Indian state rules. "
+               f"I can't answer questions about {place}.",
+    )
 
 
 def _scope_out(scope: Scope) -> ScopeOut:
@@ -92,6 +107,12 @@ def _cached(services: Services, turn: Turn, t0: float) -> ChatResponse | None:
 def handle(services: Services, req: ChatRequest, *, log: bool = True, use_cache: bool = True) -> tuple[ChatResponse, Turn]:
     """Answer one message (non-streaming). Repeated questions come from the answer cache."""
     t0 = time.perf_counter()
+    if (guarded := out_of_scope(services, req)) is not None:
+        turn, resp = guarded
+        resp.latency_ms = int((time.perf_counter() - t0) * 1000)
+        if log:
+            _log(turn, resp)
+        return resp, turn
     turn = plan(services, req)
     hit = _cached(services, turn, t0) if use_cache else None
     if hit is not None:
@@ -115,6 +136,13 @@ def handle(services: Services, req: ChatRequest, *, log: bool = True, use_cache:
 def handle_stream(services: Services, req: ChatRequest) -> Iterator[tuple[str, dict[str, Any]]]:
     """Yield SSE events: `meta` (route + scope), `token`* (RAG only), then `done` with the full response."""
     t0 = time.perf_counter()
+    if (guarded := out_of_scope(services, req)) is not None:
+        turn, resp = guarded
+        resp.latency_ms = int((time.perf_counter() - t0) * 1000)
+        _log(turn, resp)
+        yield "meta", {"route": "not_found", "scope": resp.scope.model_dump(exclude_none=True) if resp.scope else {}}
+        yield "done", resp.model_dump(exclude_none=True)
+        return
     try:
         turn = plan(services, req)
     except LLMError as e:  # plan() already falls back on errors; this is a last resort

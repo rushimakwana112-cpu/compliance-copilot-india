@@ -88,3 +88,25 @@ def resolve(text: str, mode: str, default_state: str) -> Scope:
     if found:
         return Scope([sid for sid, _ in found], "detected", [alias for _, alias in found])
     return Scope([default], "default")
+
+
+# Places outside India. A question about them is refused before retrieval: the documents are Indian law only,
+# and similarity search would still find *something* (Dubai gratuity looks a lot like Indian gratuity).
+FOREIGN_PLACES = (
+    "dubai", "abu dhabi", "sharjah", "uae", "u.a.e.", "united arab emirates", "saudi arabia", "saudi", "riyadh",
+    "qatar", "doha", "oman", "muscat", "kuwait", "bahrain", "usa", "u.s.a.", "u.s.", "united states", "america",
+    "california", "new york", "texas", "uk", "u.k.", "united kingdom", "england", "britain", "london", "scotland",
+    "ireland", "singapore", "malaysia", "australia", "new zealand", "canada", "germany", "france", "netherlands",
+    "europe", "european union", "japan", "china", "hong kong", "nepal", "bangladesh", "sri lanka", "pakistan",
+    "philippines", "south africa",
+)
+_FOREIGN = re.compile(
+    r"(?<![\w.])(" + "|".join(re.escape(p) for p in sorted(FOREIGN_PLACES, key=len, reverse=True)) + r")(?![\w])",
+    re.IGNORECASE,
+)
+
+
+def foreign_place(text: str) -> str | None:
+    """The first non-Indian country or city named in `text`, as written, or None."""
+    m = _FOREIGN.search(text)
+    return m.group(1) if m else None
