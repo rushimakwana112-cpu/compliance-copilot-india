@@ -33,6 +33,14 @@ class ChatRequest(BaseModel):
     history: list[Turn] = Field(default_factory=list)
     jurisdiction: JurisdictionIn = Field(default_factory=JurisdictionIn)
 
+    @field_validator("message")
+    @classmethod
+    def not_blank(cls, message: str) -> str:
+        """Spaces or newlines only would reach the search as an empty query."""
+        if not message.strip():
+            raise ValueError("Message is empty")
+        return message
+
     @field_validator("history")
     @classmethod
     def last_turns(cls, history: list[Turn]) -> list[Turn]:

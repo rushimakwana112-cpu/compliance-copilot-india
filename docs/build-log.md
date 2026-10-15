@@ -227,3 +227,11 @@ A new test (`tests/test_deploy.py`) fails if a legal-looking number (PF/EPS/ESIC
 **Fix:** Render now checks `/healthz` (no outside calls). `/api/health` lists models with a 5 s timeout and no retries or waits; a busy 429 still counts as "key works". The sidebar shows "Checking…" until health answers and "Offline (demo)" if it never does. Tests: `test_groq_health_never_waits_or_retries`, `test_render_blueprint_matches_the_deploy_plan`, `test_publish_readiness`.
 
 **What to learn:** a *liveness* check ("is the process up?") and a *readiness/status* check ("are my dependencies OK?") are different jobs. The platform's restart decision should depend only on the first, so a slow third party can't make your app look dead. Retries belong on user requests, never on health checks: a health check should answer fast and report the problem, not hide it by waiting.
+
+## Audit fix 2: blank messages and New chat (16 Oct 2026)
+
+**Bug (low):** a message of only spaces or newlines passed validation (`min_length=1` counts spaces), reached Pinecone as an empty query, and the user saw *"Search failed: ApiError: [400 INVALID_ARGUMENT] … 'text' is empty"*. **Fix:** `ChatRequest` rejects a blank message with HTTP 422 before any search. Test: `test_blank_message_is_rejected_before_search`.
+
+**Bug (medium):** clicking **New chat** while an answer was loading aborted the request, but the old `ask()` then finished: it added a "Stopped before an answer arrived" bubble to the fresh chat and pushed the old question into `ui.history`, which is sent with the next question (so the follow-up rewriter and the CTC slot-filling could pick up the old conversation). Reproduced in the browser. **Fix:** a chat counter `ui.chat`; New chat increments it, and a request started in an older chat drops its answer. Test: `test_new_chat_drops_the_answer_of_a_stopped_request`.
+
+**What to learn:** "aborting" a request in JavaScript doesn't stop the code that was waiting for it; that code wakes up later with an error and carries on. Any async function that writes to shared state must check that the world it started in still exists. A simple generation number is the usual guard. And validate meaning, not just length: "   " has length 3 but says nothing.

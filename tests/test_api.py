@@ -151,3 +151,23 @@ def test_rates_endpoint_lists_figures_with_sources(services):
     assert body["rates"]["gratuity.max_amount"]["value"] is None  # still to be notified: listed, not hidden
     assert body["due_dates"]["tds_salary_deposit"]["section"] == "rule 218(2)"
     assert "gujarat" in body["professional_tax"] and bad.status_code == 422
+
+
+@pytest.mark.parametrize("message", ["   ", "\n\n\t"])
+def test_blank_message_is_rejected_before_search(client, store, message):
+    """Spaces only used to reach Pinecone and show its raw 'Search failed: ApiError ... empty' to the user."""
+    for path in ("/api/chat", "/api/chat/stream"):
+        r = client.post(path, json={"message": message})
+        assert r.status_code == 422 and "Message is empty" in r.text
+
+
+def test_new_chat_drops_the_answer_of_a_stopped_request():
+    """New chat while an answer is loading: the old request must not write into the new chat or its history."""
+    from pathlib import Path
+
+    html = (Path(__file__).resolve().parents[1] / "frontend" / "index.html").read_text(encoding="utf-8")
+    ask = html.split("async function ask(text)")[1].split("\nfunction sleep(")[0]
+    assert "chat = ui.chat" in ask
+    assert ask.index("if (chat !== ui.chat)") < ask.index("addBot(answer)") < ask.index("ui.history.push")
+    new_chat = html.split('$("newChat").onclick')[1].split("};")[0]
+    assert "ui.chat++" in new_chat

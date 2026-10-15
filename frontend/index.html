@@ -599,6 +599,7 @@ const ui = {
   answers: {},                                // id -> answer payload
   activeId: null,
   busy: false,
+  chat: 0,                                    // bumped by New chat, so a stopped request can't write into the new one
   controller: null                            // AbortController of the running request
 };
 
@@ -909,7 +910,7 @@ function stopGenerating() { if (ui.controller) ui.controller.abort(); }
 async function ask(text) {
   text = (text || "").trim();
   if (!text || ui.busy) return;
-  const scope = resolveScope(text);
+  const scope = resolveScope(text), chat = ui.chat;
   addUser(text);
   $("input").value = ""; autoGrow(); renderScopeLine();
   ui.controller = new AbortController();
@@ -942,6 +943,7 @@ async function ask(text) {
     }
   }
   removePending();
+  if (chat !== ui.chat) { ui.controller = null; setBusy(false); return; }   // New chat was clicked meanwhile
   answer.scope = answer.scope || { state: scope.state, states: scope.states, how: scope.how };
   answer.question = text;
   addBot(answer);
@@ -1223,6 +1225,7 @@ $("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shif
 $("composer").onsubmit = (e) => { e.preventDefault(); if (ui.busy) stopGenerating(); else ask($("input").value); };
 $("newChat").onclick = () => {
   stopGenerating();
+  ui.chat++;
   ui.history = []; ui.transcript = []; ui.answers = {}; ui.activeId = null; renderWelcome();
   $("srcList").innerHTML = '<div class="src-empty">No answer selected yet.</div>';
   $("srcFor").textContent = "Select an answer to see the passages it used.";
