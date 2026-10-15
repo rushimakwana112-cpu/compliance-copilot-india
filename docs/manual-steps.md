@@ -61,21 +61,7 @@ Open https://github.com/rushimakwana112-cpu/compliance-copilot-india/pull/1 , ch
 
 ## 5. Deploy on Render
 
-1. Go to https://dashboard.render.com and sign in with GitHub.
-2. Click **New +** → **Blueprint**.
-3. Pick the `compliance-copilot-india` repository and the default branch. Render reads `render.yaml`.
-4. Render asks for 4 secret values:
-   - `GROQ_API_KEY`: from https://console.groq.com/keys
-   - `GROQ_MODEL`: `qwen/qwen3.8-27b`
-   - `PINECONE_API_KEY`: from the Pinecone console, **API Keys**
-   - `PINECONE_INDEX`: `compliance-copilot-cloud`
-5. `PUBLIC_MODE=true`, `LLM_PROVIDER=groq` and `EMBED_PROVIDER=pinecone` are already set by the blueprint. Click **Apply**.
-6. Wait for the deploy log to end with `Your service is live`.
-7. Check it in PowerShell (replace the URL with yours):
-   ```powershell
-   Invoke-RestMethod https://compliance-copilot.onrender.com/api/health
-   ```
-   Expected: `status : ok`, `provider : groq`, `public_mode : True`. The first call after 15 minutes idle can take up to a minute.
+Follow [DEPLOY.md](../DEPLOY.md): click the button, sign in with GitHub, paste `GROQ_API_KEY` and `PINECONE_API_KEY`, click **Apply**, then check `/api/health`.
 
 ## 6. Record a 2-minute demo video
 

@@ -176,3 +176,14 @@ A new test (`tests/test_deploy.py`) fails if a legal-looking number (PF/EPS/ESIC
 `data/rates.yaml` now stores each figure as a list of versions with `effective_from`, `effective_to`, `source_doc`, `section` and `status`. The PF wage ceiling has two: ₹15,000 (historical) and ₹25,000 (Gazette notification of 17 Sept 2026; its effective date is left for Rushi to fill from the notification). The calculators pick the version valid today, or on a date written in the question, and the PF answer says which ceiling and notification it used. PF is now computed on the PF wage (basic up to the ceiling), with EPS up to the separate EPS wage cap and an EDLI line. `GET /api/rates` returns every figure as it applies on a date, with nulls listed; the frontend shows the PF ceiling in live mode, and its offline PF demo uses those rates when it has them. Tests use made-up figures in `tests/fixtures/rates.yaml`.
 
 **What to learn:** a legal figure is not a constant; it is a value *with a validity period and a source*. Storing versions instead of overwriting means old questions ("what was the ceiling in March 2026?") still get the right answer, and every number on screen can be traced to a document.
+
+## Publish readiness (15 Oct 2026)
+
+**What changed:** `render.yaml` now sets the model, index and threshold itself, so only the two API keys are secret. The health check is `/api/health` (always HTTP 200, Groq check cached for a minute). `/api/documents` lists the documents from `data/sources.csv` when `data/manifest.json` is missing, which is the case on Render because ingestion never runs there. A GitHub Actions workflow runs the tests on every push to `main`. README rewritten for visitors, plus DEPLOY.md.
+
+**What to learn:**
+- *Configuration vs secrets.* A model id or index name is configuration: it is safe to commit, and committing it means fewer things to type in a dashboard. Only values that grant access (API keys) need `sync: false`.
+- *A health check must not crash-loop.* Render restarts a service whose health check fails. `/api/health` returns 200 with `status: degraded` and a list of issues, so a bad key shows up as a readable message instead of endless restarts.
+- *The server doesn't have your PC's files.* `data/manifest.json` is written by ingestion on your PC and is not committed, so code running on the server must cope without it.
+- *CI (continuous integration)* means a GitHub server runs your tests on every push. A red cross on a commit tells you something broke before anyone deploys it. The tests need no keys because Groq and Pinecone are faked.
+- *Merge resolution rules are about conflicts.* When merging, a file can change on only one side (no conflict): git takes that side automatically. Overriding it just because "my branch wins" can throw away real work, as almost happened with the eval report.

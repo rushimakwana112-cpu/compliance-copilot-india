@@ -8,7 +8,7 @@ In PowerShell, in the project folder:
 ```powershell
 .\scripts\run_all.ps1
 ```
-Expected: a green `OK:` line after each step and `All done.` at the end. It switches to the deployed (default) branch, pulls, installs, runs the tests (`243 passed`), re-indexes Pinecone, runs the eval, writes the numbers into the README table, commits and pushes.
+Expected: a green `OK:` line after each step and `All done.` at the end. It switches to the deployed default branch (`main`), pulls, installs, runs the tests (`252 passed`), re-indexes Pinecone, runs the eval, writes the numbers into the README table, commits and pushes.
 If it stops, the red `STOPPED at:` line names the step and what to check. If Windows says scripts are disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once and try again.
 
 ## 2. Check the null and flagged rates in `data/rates.yaml`
@@ -28,16 +28,6 @@ No official PDF was reachable from the build machine, so nothing was filled from
 
 To index those documents too, paste their links into the commented rows at the bottom of `data/sources.csv` (remove the `# `); the script picks them up. Check the result at http://localhost:8000/api/rates after `uvicorn app.main:app --reload`: filled fields show their value and source, the rest `null`.
 
-## 3. Deploy: click the button and paste 4 keys
+## 3. Deploy: click the button and paste 2 keys
 
-Click **Deploy to Render** at the top of the README (sign in with GitHub). Paste:
-- `GROQ_API_KEY`: from https://console.groq.com/keys
-- `GROQ_MODEL`: `qwen/qwen3.8-27b`
-- `PINECONE_API_KEY`: from the Pinecone console, **API Keys**
-- `PINECONE_INDEX`: `compliance-copilot-cloud`
-
-Click **Apply**, wait for `Your service is live`, then check (use your URL):
-```powershell
-Invoke-RestMethod https://compliance-copilot.onrender.com/api/health
-```
-Expected: `status : ok`, `provider : groq`, `public_mode : True`. The first call after 15 idle minutes can take up to a minute.
+Follow [DEPLOY.md](DEPLOY.md). Only `GROQ_API_KEY` and `PINECONE_API_KEY` are asked for; the model, index and public mode are set in `render.yaml`.
