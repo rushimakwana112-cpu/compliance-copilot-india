@@ -529,7 +529,9 @@ def _definition_passages(services: Services, question: str, scope: Scope, status
 # ----------------------------------------------------------------- generation
 SYSTEM_PROMPT = """You are Compliance Copilot, an assistant for Indian payroll and labour law.
 Answer ONLY from the numbered passages. Rules:
-1. Start with a direct answer (Yes / No / the figure exactly as written in a passage), then explain briefly in 2-4 sentences.
+1. Lead with the answer, then explain briefly in 2-4 sentences. Start with Yes or No ONLY for a yes/no question.
+For what / who / when / how much / definition questions, start with the answer itself (the definition, who is
+covered, the date, the figure exactly as written in a passage), never with Yes or No.
 2. Cite every claim with the passage number in square brackets, like [1] or [2]. Only use numbers of passages you were given.
 3. Never state a rate, ceiling, slab or amount that is not written in the passages. Do not do arithmetic.
 4. If passages conflict, prefer the one with the latest effective date and say that you did.
@@ -589,6 +591,24 @@ def fit_budget(passages: list[Passage], budget: int) -> int:
     return dropped
 
 
+YES_NO = re.compile(r"^\s*(?:and|so|but|also)?\s*(?:is|are|am|does|do|did|can|could|will|would|should|shall|must|"
+                    r"may|has|have|had|was|were|isn't|aren't|doesn't|don't|can't)\b", re.IGNORECASE)
+LEADING_YES_NO = re.compile(r"^\s*(?:\*\*)?(?:yes|no)(?:\*\*)?\s*[,.:;!—–-]+(?:\*\*)?\s*", re.IGNORECASE)
+
+
+def is_yes_no(question: str) -> bool:
+    """'Is ESIC applicable…?' / 'Can an employer deduct…?' yes; 'What is…', 'Who is covered…', 'Definition of…' no."""
+    return bool(YES_NO.match(question))
+
+
+def answer_style(question: str, answer: str) -> str:
+    """Drop a leading 'Yes,' / 'No.' the model put before the answer to a question that isn't yes/no."""
+    if not question or is_yes_no(question):
+        return answer
+    rest = LEADING_YES_NO.sub("", answer, count=1)
+    return rest[:1].upper() + rest[1:] if rest != answer and rest else answer
+
+
 def build_messages(question: str, passages: list[Passage], scope: Scope) -> list[dict[str, str]]:
     """System prompt + numbered passages. Passage order = citation numbers."""
     blocks = [passage_block(i, p) for i, p in enumerate(passages, 1)]
@@ -597,7 +617,9 @@ def build_messages(question: str, passages: list[Passage], scope: Scope) -> list
         system += "\n" + COVERAGE_RULE
     if len(scope.states) > 1:
         system += "\n" + COMPARE_RULE.format(states=", ".join(scope.label().split(" + ")[1:]))
-    user = "Passages:\n\n" + "\n\n".join(blocks) + f"\n\nQuestion: {question}"
+    style = ("This is a yes/no question: start with Yes or No." if is_yes_no(question)
+             else "This is not a yes/no question: start with the answer itself, not with Yes or No.")
+    user = "Passages:\n\n" + "\n\n".join(blocks) + f"\n\nQuestion: {question}\n{style}"
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
@@ -668,7 +690,7 @@ def renumber(answer: str, n_passages: int) -> tuple[str, list[int]]:
     return CITE.sub(fix, answer), order
 
 
-def finish(raw: str, passages: list[Passage], scope: Scope) -> ChatResponse:
+def finish(raw: str, passages: list[Passage], scope: Scope, question: str = "") -> ChatResponse:
     """Turn the model's raw text into the API response.
 
     Only the passages the answer cites are listed as citations, renumbered in the order they are
@@ -676,7 +698,7 @@ def finish(raw: str, passages: list[Passage], scope: Scope) -> ChatResponse:
     """
     if is_not_found(raw):
         return not_found(scope)
-    text = clean_citations(raw, len(passages))
+    text = answer_style(question, clean_citations(raw, len(passages)))
     note = repealed_note(text, passages)
     text, order = renumber(text, len(passages))
     cited = [passages[i - 1].citation() for i in order]
@@ -710,7 +732,7 @@ def answer(services: Services, question: str, scope: Scope,
     if trace is not None:
         trace.prompt_tokens = estimate_tokens(messages)
     raw = services.llm.chat(messages)
-    return finish(raw, passages, scope), passages
+    return finish(raw, passages, scope, question), passages
 
 
 def stream(services: Services, question: str, scope: Scope, trace: Trace | None = None) -> Iterator[tuple[str, object]]:
@@ -740,4 +762,4 @@ def stream(services: Services, question: str, scope: Scope, trace: Trace | None 
         yield "token", token
     if not released and raw and not is_not_found(raw):
         yield "token", raw
-    yield "done", finish(raw, passages, scope)
+    yield "done", finish(raw, passages, scope, question)

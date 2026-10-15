@@ -454,3 +454,41 @@ def test_expansion_stays_within_the_token_budget(services, store, llm):
     llm.responder = lambda m, j: "Yes [1]."
     _, passages = rag.answer(services, "Is bonus paid to contract workers too?", Scope(["gujarat"], "default"))
     assert rag.context_tokens(passages) <= services.settings.context_token_budget
+
+
+# ----------------------------------------------------------------- answer style
+@pytest.mark.parametrize("question, yes_no", [
+    ("Is ESIC applicable on ₹24,000 gross?", True),
+    ("Can an employer deduct wages for absence from duty?", True),
+    ("And is bonus paid to contract workers too?", True),
+    ("Definition of wages under the Code on Wages", False),
+    ("What is a fixed term employee?", False),
+    ("Who is covered for gratuity under the SS Code", False),
+    ("When must the employer deposit PF contributions each month?", False),
+    ("How much bonus can an employee get?", False),
+])
+def test_is_yes_no(question, yes_no):
+    assert rag.is_yes_no(question) is yes_no
+
+
+@pytest.mark.parametrize("answer, styled", [
+    ("Yes, wages means all remuneration [1].", "Wages means all remuneration [1]."),
+    ("**Yes.** Wages means all remuneration [1].", "Wages means all remuneration [1]."),
+    ("No — the definition excludes bonus [1].", "The definition excludes bonus [1]."),
+    ("No employer shall pay less [1].", "No employer shall pay less [1]."),  # "No" as a word, not an answer
+    ("Wages means all remuneration [1].", "Wages means all remuneration [1]."),
+])
+def test_definition_answers_do_not_start_with_yes(answer, styled):
+    assert rag.answer_style("Definition of wages under the Code on Wages", answer) == styled
+    assert rag.answer_style("Is bonus part of wages?", answer) == answer  # a real yes/no question keeps it
+
+
+def test_q31_answer_and_prompt(services, store, llm):
+    store.add("wages means all remuneration including basic pay", doc="Code on Wages, 2019", section="Section 2",
+              page=2, scope="central", status="current", doc_type="act")
+    llm.responder = lambda m, j: "Yes, under the Code, wages means all remuneration, including basic pay [1]."
+    resp, _ = rag.answer(services, "Definition of wages under the Code on Wages", Scope(["gujarat"], "default"))
+    assert resp.answer.startswith("Under the Code, wages means")
+    prompt = llm.calls[-1]
+    assert "never with Yes or No" in prompt[0]["content"]
+    assert prompt[1]["content"].endswith("This is not a yes/no question: start with the answer itself, not with Yes or No.")

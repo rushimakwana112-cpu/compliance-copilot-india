@@ -144,3 +144,9 @@ An eval run reported 13 RAG questions as "Daily demo limit reached" that had ans
 Eval q07 ("Is bonus paid to contract workers too?") was refused: the Code says "contract labour" and "contractor", so the passage scored below the threshold. `data/query_expansion.yaml` maps everyday words to the law's words (contract worker → contract labour, PF → provident fund, minimum wage → minimum rate of wages / floor wage …) and topic hints (bonus → the Code on Wages bonus chapter). Retrieval now searches the question plus up to 2 variants, keeps each passage's best score, de-duplicates and re-ranks as before. The variants are logged as `query_variants` in `logs/chats.jsonl`. The number of passages kept is unchanged, so the ~3,000-token budget still holds.
 
 **What to learn:** embeddings match meaning, but not perfectly; a different word for the same thing can still cost enough similarity to fall below a threshold. A small hand-made synonym map is cheap, easy to read and easy to test, and it fixes the vocabulary gap between users and legal text without another model call.
+
+## Answer style: "Yes," only for yes/no questions
+
+q31 ("Definition of wages under the Code on Wages") came back starting with "Yes,", because the prompt said "start with a direct answer (Yes / No / …)". The prompt now says to start with Yes or No only for yes/no questions, and each request says which kind it is (questions starting with is/are/does/can/… are yes/no). As a safety net, a leading "Yes," or "No." before the answer to any other question is removed after generation.
+
+**What to learn:** an instruction like "start with Yes/No" gets applied everywhere, even where it makes no sense. Tell the model what kind of question it has, and back up a rule that matters with a cheap check in code.
