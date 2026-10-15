@@ -1,0 +1,28 @@
+# Render Blueprint: one free web service. Secrets are entered in the Render dashboard
+# (sync: false means "ask me for the value"), never committed here.
+services:
+  - type: web
+    name: compliance-copilot
+    runtime: python
+    plan: free
+    region: singapore          # closest Render region to India
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: PUBLIC_MODE
+        value: "true"
+      - key: LLM_PROVIDER
+        value: groq
+      - key: EMBED_PROVIDER
+        value: pinecone
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        sync: false            # pick one with: python -m app.list_models
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX
+        sync: false            # e.g. compliance-copilot-cloud, the index you ingested into

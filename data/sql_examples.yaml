@@ -3,7 +3,8 @@
 #   * only SELECT on the `employees` table
 #   * legal thresholds are NEVER written as numbers; use a named parameter instead:
 #       :esic_ceiling       (esic.wage_ceiling in rates.yaml)
-#       :eps_wage_ceiling   (pf.eps_wage_ceiling)
+#       :pf_wage_ceiling    (pf.wage_ceiling)
+#       :eps_wage_ceiling   (pf.eps_wage_cap)
 #       :gratuity_min_years (gratuity.min_years_permanent)
 #   * numbers the user typed themselves (e.g. "gross above 50,000") may be literals
 - question: How many sample employees are in Gujarat?

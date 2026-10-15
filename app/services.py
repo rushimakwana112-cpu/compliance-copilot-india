@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.config import Settings, get_settings
-from app.llm import LLM, OllamaClient
-from app.vectorstore import PineconeStore, VectorStore
+from app.limits import AnswerCache, RateLimiter
+from app.llm import LLM, make_llm
+from app.vectorstore import VectorStore, make_store
 
 
 @dataclass
@@ -15,16 +16,19 @@ class Services:
     llm: LLM
     store: VectorStore | None  # None when Pinecone isn't configured or reachable
     store_error: str = ""
+    cache: AnswerCache = field(default=None)  # type: ignore[assignment]  # built from settings below
+    limiter: RateLimiter = field(default=None)  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        s = self.settings
+        if self.cache is None:  # not `or`: an empty cache is falsy
+            self.cache = AnswerCache(s.cache_size)
+        if self.limiter is None:
+            self.limiter = RateLimiter(s.rate_limit_per_min, s.rate_limit_per_day)
 
 
 def build_services(settings: Settings | None = None) -> Services:
-    """Create real Ollama + Pinecone clients from settings."""
+    """Create the configured LLM (Groq or Ollama) and Pinecone store from settings."""
     s = settings or get_settings()
-    llm = OllamaClient(base_url=s.ollama_url, model=s.llm_model, embed_model=s.embed_model)
-    if not s.pinecone_api_key:
-        return Services(s, llm, None, "PINECONE_API_KEY is not set in .env")
-    try:
-        store: VectorStore | None = PineconeStore(s.pinecone_api_key, s.pinecone_index)
-        return Services(s, llm, store)
-    except Exception as e:  # network, auth or quota errors: keep the app up, report in /api/health
-        return Services(s, llm, None, f"Pinecone unavailable: {e.__class__.__name__}: {str(e)[:160]}")
+    store, error = make_store(s)
+    return Services(s, make_llm(s), store, error)

@@ -3,30 +3,27 @@ so they check the arithmetic, not the law."""
 
 from __future__ import annotations
 
+from datetime import date
+from pathlib import Path
+
 import pytest
+import yaml
 
 from app.jurisdiction import Scope
 from app.router import route_rules
 from app.tools import (
     RateMissing, esic_calculator, gratuity_estimate, inr, load_rates, parse_amounts, pf_calculator,
-    professional_tax, run,
+    professional_tax, question_date, rate, resolved, run,
 )
 
 
-def r(v, doc="Test circular"):
-    return {"value": v, "source_doc": doc, "effective_date": "2025-01-01"}
+FIXTURE = Path(__file__).parent / "fixtures" / "rates.yaml"
+TODAY = date(2026, 10, 15)
 
 
 @pytest.fixture
 def rates():
-    return {
-        "pf": {"employee_rate": r(0.10), "employer_rate": r(0.10), "eps_rate": r(0.05), "eps_wage_ceiling": r(10000)},
-        "esic": {"wage_ceiling": r(20000), "employee_rate": r(0.01), "employer_rate": r(0.03)},
-        "gratuity": {"days_per_year": r(10), "wage_days_divisor": r(20), "min_years_permanent": r(4),
-                     "min_years_fixed_term": r(1), "round_up_after_months": r(6), "max_amount": r(100000)},
-        "professional_tax": {"gujarat": {"source_doc": "Test PT schedule", "slabs": [
-            {"from": 0, "to": 9999, "monthly_tax": 0}, {"from": 10000, "to": None, "monthly_tax": 100}]}},
-    }
+    return yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
 
 
 def test_inr_indian_grouping():
@@ -34,11 +31,50 @@ def test_inr_indian_grouping():
 
 
 def test_pf_split(rates):
-    out = pf_calculator(20000, rates)
+    out = pf_calculator(20000, rates, TODAY)
     amounts = [row[-1] for row in out.table.rows]
-    # employee 10% = 2000; EPS 5% of capped 10000 = 500; employer EPF 2000-500 = 1500; total 4000
-    assert amounts == ["₹2,000", "₹500", "₹1,500", "₹4,000"]
-    assert out.table.totalRow and out.citations[0].doc == "Test circular" and out.citations[0].score is None
+    # PF wage = min(20000, ceiling 18000) = 18000; employee 10% = 1800; EPS 5% of capped 10000 = 500;
+    # employer EPF 1800-500 = 1300; EDLI 1% of 18000 = 180; total 1800+1800+180 = 3780
+    assert amounts == ["₹18,000", "₹1,800", "₹500", "₹1,300", "₹180", "₹3,780"]
+    assert out.table.totalRow and out.citations[0].score is None
+    # The output says which ceiling and notification it used
+    assert "wage ceiling of ₹18,000 from New test notification" in out.answer
+    assert "New test notification" in out.table.rows[0][1] and out.citations[0].doc == "New test notification"
+
+
+def test_pf_uses_the_ceiling_valid_on_the_date(rates):
+    old = pf_calculator(20000, rates, date(2026, 3, 1))
+    assert old.table.rows[0][-1] == "₹12,000" and "Old test notification" in old.answer
+    s = Scope(["gujarat"], "default")
+    assert "₹12,000 from Old test notification" in run("PF for basic 20000 on 1 March 2026", s, rates, TODAY).answer
+    assert "₹18,000 from New test notification" in run("PF for basic 20000", s, rates, TODAY).answer
+    assert run("PF for basic 20000 in March 2026", s, rates, TODAY).tool == "pf_calculator(basic=20000)"
+
+
+def test_current_version_wins_while_dates_are_unknown():
+    node = [{"value": 1, "status": "historical", "source_doc": "old"}, {"value": 2, "status": "current", "source_doc": "new"}]
+    out = rate({"pf": {"wage_ceiling": node}}, "pf.wage_ceiling", TODAY)
+    assert (out.value, out.source_doc, out.label()) == (2, "new", "new, effective date not configured")
+
+
+def test_null_value_says_rate_not_configured(rates):
+    rates["pf"]["edli_rate"][0]["value"] = None
+    out = run("Calculate PF for basic ₹18,000", Scope(["gujarat"], "default"), rates, TODAY)
+    assert out.answer.startswith("Rate not configured: pf.edli_rate.") and out.table is None
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("PF on basic 20000 on 1 Oct 2026", date(2026, 10, 1)),
+    ("PF on basic 20000 as of 2026-07-01", date(2026, 7, 1)),
+    ("PF on basic 20000 on 15/08/2026", date(2026, 8, 15)),
+    ("PF on basic 20000 in March 2026", date(2026, 3, 1)),
+    ("PF on basic 20000 from September 17, 2026", date(2026, 9, 17)),
+    ("PF on basic 20000", None),
+])
+def test_question_date(text, expected):
+    found, rest = question_date(text)
+    assert found == expected
+    assert parse_amounts(rest) == [20000]  # the year is not read as an amount
 
 
 def test_esic_within_and_above_ceiling(rates):
@@ -65,9 +101,31 @@ def test_gratuity_rounding_ceiling_and_eligibility(rates):
 
 
 def test_shipped_rates_are_unconfigured_and_say_so():
-    # The repo ships rates.yaml with nulls on purpose: the calculator must refuse, not guess.
+    # The repo ships rates.yaml with nulls where no official document was checked: refuse, don't guess.
     out = run("Calculate PF for basic ₹18,000", Scope(["gujarat"], "default"), load_rates())
-    assert out.type == "tool" and "Rate not configured" in out.answer and out.table is None
+    assert out.type == "tool" and out.answer.startswith("Rate not configured: pf.employee_rate") and out.table is None
+
+
+def test_shipped_rates_have_the_two_pf_ceilings():
+    shipped = load_rates()
+    on = resolved(shipped, TODAY)["rates"]["pf.wage_ceiling"]
+    assert on["value"] == 25000 and on["source_doc"] == "Gazette notification 17 Sept 2026" and on["status"] == "current"
+    old = [v for v in shipped["pf"]["wage_ceiling"] if v["status"] == "historical"]
+    assert [v["value"] for v in old] == [15000]
+    for group in ("pf", "esic", "gratuity"):  # every figure is a list of dated versions
+        for name, node in shipped[group].items():
+            assert isinstance(node, list) and all({"value", "effective_from", "effective_to", "source_doc", "status"}
+                                                  <= set(v) for v in node), f"{group}.{name}"
+
+
+def test_resolved_lists_nulls(rates):
+    rates["esic"]["employee_rate"][0]["value"] = None
+    out = resolved(rates, TODAY)
+    assert out["date"] == "2026-10-15" and out["rates"]["esic.employee_rate"]["value"] is None
+    assert out["rates"]["pf.wage_ceiling"] == {"value": 18000, "effective_from": "2026-07-01", "effective_to": None,
+                                               "source_doc": "New test notification", "section": "p. 2",
+                                               "status": "current", "url": None}
+    assert out["professional_tax"]["gujarat"]["slabs"][1]["monthly_tax"] == 100
 
 
 def test_parse_amounts():
@@ -82,7 +140,7 @@ def test_run_picks_calculator(rates):
     assert run("Calculate ESIC for gross 15,000", s, rates).tool.startswith("esic_calculator")
     assert run("compute PT on ₹15000 salary in Ahmedabad", s, rates).tool.startswith("professional_tax(state='gujarat'")
     assert run("calculate gratuity for basic+DA 30000 and 6 years fixed-term", s, rates).tool.endswith("'fixed-term')")
-    assert run("how much PF on basic 18k", s, rates).tool == "pf_calculator(basic=18000)"
+    assert run("how much PF on basic 18k", s, rates, TODAY).tool == "pf_calculator(basic=18000)"
 
 
 @pytest.mark.parametrize("q, expected", [

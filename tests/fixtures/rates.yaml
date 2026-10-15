@@ -1,0 +1,28 @@
+# MADE-UP figures for tests only. They check the arithmetic and the date logic, not the law.
+pf:
+  wage_ceiling:
+    - {value: 12000, effective_from: 2020-01-01, effective_to: 2026-06-30, status: historical, source_doc: "Old test notification", section: "p. 1"}
+    - {value: 18000, effective_from: 2026-07-01, effective_to: null, status: current, source_doc: "New test notification", section: "p. 2"}
+  employee_rate: [{value: 0.10, effective_from: 2020-01-01, status: current, source_doc: "Test circular"}]
+  employer_rate: [{value: 0.10, effective_from: 2020-01-01, status: current, source_doc: "Test circular"}]
+  eps_rate: [{value: 0.05, effective_from: 2020-01-01, status: current, source_doc: "Test circular"}]
+  eps_wage_cap: [{value: 10000, effective_from: 2020-01-01, status: current, source_doc: "Test circular"}]
+  edli_rate: [{value: 0.01, effective_from: 2020-01-01, status: current, source_doc: "Test circular"}]
+esic:
+  wage_ceiling: [{value: 20000, effective_from: 2020-01-01, status: current, source_doc: "Test circular"}]
+  employee_rate: [{value: 0.01, effective_from: 2020-01-01, status: current, source_doc: "Test circular"}]
+  employer_rate: [{value: 0.03, effective_from: 2020-01-01, status: current, source_doc: "Test circular"}]
+gratuity:
+  days_per_year: [{value: 10, status: current, source_doc: "Test circular"}]
+  wage_days_divisor: [{value: 20, status: current, source_doc: "Test circular"}]
+  min_years_permanent: [{value: 4, status: current, source_doc: "Test circular"}]
+  min_years_fixed_term: [{value: 1, status: current, source_doc: "Test circular"}]
+  round_up_after_months: [{value: 6, status: current, source_doc: "Test circular"}]
+  max_amount: [{value: 100000, status: current, source_doc: "Test circular"}]
+professional_tax:
+  gujarat:
+    - status: current
+      source_doc: "Test PT schedule"
+      slabs:
+        - {from: 0, to: 9999, monthly_tax: 0}
+        - {from: 10000, to: null, monthly_tax: 100}

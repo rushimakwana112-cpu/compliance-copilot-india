@@ -263,6 +263,12 @@ select {
   border: 1px solid var(--line); background: transparent; color: var(--muted); max-width: 100%;
 }
 .cite:hover, .cite[aria-pressed="true"] { border-color: var(--accent); color: var(--text); }
+/* Retrieved but not cited: collapsed, so the answer shows only its real sources. */
+.others { font-size: 12.5px; color: var(--muted); }
+.others summary { cursor: pointer; min-height: 28px; display: inline-flex; align-items: center; }
+.others summary:hover { color: var(--text); }
+.others ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 2px; }
+.others .src { opacity: .8; padding-top: 10px; }
 .table-wrap { overflow-x: auto; max-width: 100%; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .answer table { margin: 0 0 10px; }
@@ -453,7 +459,7 @@ pre.code {
         <ul class="doc-list" id="docList"></ul>
       </section>
 
-      <section>
+      <section id="addSource">
         <h2 class="section-title">Add a source</h2>
         <div class="add-source">
           <input type="file" id="fileInput" accept="application/pdf" class="sr-only" multiple tabindex="-1">
@@ -473,10 +479,11 @@ pre.code {
         <h2 class="section-title">Pipeline</h2>
         <dl class="kv">
           <dt>LLM</dt><dd id="kvModel">Ollama · qwen2.5:7b</dd>
-          <dt>Embeddings</dt><dd>bge-m3</dd>
+          <dt>Embeddings</dt><dd id="kvEmbed">bge-m3</dd>
           <dt>Vector DB</dt><dd>Pinecone</dd>
           <dt>Data</dt><dd>sample_payroll.db</dd>
           <dt>Mode</dt><dd id="modeLabel">demo</dd>
+          <dt>PF ceiling</dt><dd id="kvPfCeiling" title="From data/rates.yaml via /api/rates">[from rates.yaml]</dd>
         </dl>
       </section>
     </aside>
@@ -494,7 +501,7 @@ pre.code {
           <div class="chips" id="chips"></div>
           <div class="input-row">
             <label for="input" class="sr-only">Ask a compliance question</label>
-            <textarea id="input" rows="1" placeholder="Ask about PF, ESIC, wages, bonus, gratuity, PT, TDS…"></textarea>
+            <textarea id="input" rows="1" maxlength="1000" placeholder="Ask about PF, ESIC, wages, bonus, gratuity, PT, TDS…"></textarea>
             <button class="send" id="sendBtn" type="submit" aria-label="Send" disabled></button>
           </div>
           <div class="disclaimer">For reference only, not legal advice. Always confirm against the cited official document.</div>
@@ -526,6 +533,7 @@ pre.code {
    ================================================================== */
 const API_BASE = "";   // e.g. "http://localhost:8000" when opening this file directly
 let LIVE = false;
+let RATES = null;   // live mode: GET /api/rates (data/rates.yaml, the version valid today); never hard-coded
 
 // Fallback list; replaced by GET /api/states when the backend is up.
 let STATES = [
@@ -778,12 +786,13 @@ const BADGE = {
   rag: '<span class="badge rag">From documents</span>',
   tool: '<span class="badge tool">Calculator</span>',
   sql: '<span class="badge sql">SQL query</span>',
-  not_found: '<span class="badge nf">Not in my documents</span>'
+  not_found: '<span class="badge nf">Not in my documents</span>',
+  error: '<span class="badge nf">Search failed</span>'
 };
 function metaRow(a) {
   const extra = a.type === "tool" && a.tool ? `<span class="mono">${esc(a.tool)}</span>`
               : a.type === "sql" && a.rows_scanned != null ? `<span>${esc(a.rows_scanned)} rows scanned</span>`
-              : a.type === "rag" ? `<span>${(a.citations || []).length} passages</span>` : "";
+              : a.type === "rag" ? `<span>${(a.citations || []).length} cited${(a.other_citations || []).length ? ` · ${a.other_citations.length} more searched` : ""}</span>` : "";
   const scope = a.scope ? `<span>· ${esc(scopeLabel(a.scope))}</span>` : "";
   return `<div class="meta-row">${BADGE[a.type] || ""}${extra}${scope}</div>`;
 }
@@ -792,7 +801,7 @@ function addBot(a) {
   const id = "a" + Date.now() + Math.random().toString(16).slice(2, 6);
   ui.answers[id] = a;
   const el = document.createElement("article");
-  el.className = "msg bot" + (a.type === "not_found" ? " notfound" : "");
+  el.className = "msg bot" + (a.type === "not_found" || a.type === "error" ? " notfound" : "");
   el.dataset.id = id;
   const nC = (a.citations || []).length;
   let html = metaRow(a) + `<div class="answer">${renderMarkdown(a.answer, nC)}</div>`;
@@ -810,6 +819,10 @@ function addBot(a) {
   if (a.note) html += `<div class="note">${esc(a.note)}</div>`;
   if (nC) {
     html += `<div class="cites">${a.citations.map((c, i) => `<button type="button" class="cite" data-i="${i}" aria-pressed="false">[${i + 1}] ${esc(c.doc)}${c.section ? " · " + esc(c.section) : ""}${c.page ? " · p. " + esc(c.page) : ""}</button>`).join("")}</div>`;
+  }
+  const others = a.other_citations || [];
+  if (others.length) {
+    html += `<details class="others"><summary>Other passages searched (${others.length})</summary><ul>${others.map((c) => `<li>${citeLine(c)}</li>`).join("")}</ul></details>`;
   }
   const route = ROUTE_LABEL[a.type] || a.type;
   const speed = a.latency_ms != null ? ` · ${(a.latency_ms / 1000).toFixed(1)} s` : "";
@@ -841,6 +854,20 @@ function addBot(a) {
   scrollDown();
 }
 
+function citeLine(c) {
+  return `${esc(c.doc)}${c.section ? " · " + esc(c.section) : ""}${c.page ? " · p. " + esc(c.page) : ""}`;
+}
+function srcCard(c, num, hl, id) {
+  return `
+    <div class="src ${hl ? "hl" : ""}"${id ? ` id="${id}"` : ""}>
+      <div class="src-head"><b>${num}${esc(c.doc)}</b><span style="color:var(--muted)">${c.page ? "p. " + esc(c.page) : ""}</span></div>
+      ${c.section ? `<div class="note">${esc(c.section)}${c.status === "commentary" ? " · commentary, not operative law" : ""}</div>` : ""}
+      ${c.snippet ? `<div class="src-snippet">${esc(c.snippet)}</div>` : ""}
+      ${c.score != null ? `<div class="score"><div class="bar"><i style="width:${Math.max(0, Math.min(100, Math.round(c.score * 100)))}%"></i></div><span class="mono">${Number(c.score).toFixed(2)}</span></div>` : ""}
+      ${/^https:\/\//.test(c.url || "") ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">Open official document ↗</a>` : ""}
+    </div>`;
+}
+
 function selectAnswer(id, highlight) {
   ui.activeId = id;
   document.querySelectorAll(".msg.bot").forEach((m) => m.classList.toggle("active", m.dataset.id === id));
@@ -849,19 +876,15 @@ function selectAnswer(id, highlight) {
     .forEach((b) => b.setAttribute("aria-pressed", Number(b.dataset.i) === highlight));
   const list = $("srcList");
   if (!a || !a.citations || !a.citations.length) {
-    $("srcFor").textContent = a && a.type === "not_found" ? "No passage scored above the threshold." : "This answer did not use document passages.";
+    $("srcFor").textContent = a && a.type === "not_found" ? "No passage scored above the threshold."
+      : a && a.type === "error" ? "The document search failed, so nothing was retrieved." : "This answer did not use document passages.";
     list.innerHTML = `<div class="src-empty">${a && a.type === "not_found" ? "Nothing relevant was found, so the copilot refused to guess." : "No sources for this answer."}</div>`;
     return;
   }
-  $("srcFor").textContent = a.type === "tool" ? "Where the calculator's rates come from" : "Passages used for the selected answer";
-  list.innerHTML = a.citations.map((c, i) => `
-    <div class="src ${i === highlight ? "hl" : ""}" id="src-${i}">
-      <div class="src-head"><b>[${i + 1}] ${esc(c.doc)}</b><span style="color:var(--muted)">${c.page ? "p. " + esc(c.page) : ""}</span></div>
-      ${c.section ? `<div class="note">${esc(c.section)}</div>` : ""}
-      ${c.snippet ? `<div class="src-snippet">${esc(c.snippet)}</div>` : ""}
-      ${c.score != null ? `<div class="score"><div class="bar"><i style="width:${Math.max(0, Math.min(100, Math.round(c.score * 100)))}%"></i></div><span class="mono">${Number(c.score).toFixed(2)}</span></div>` : ""}
-      ${/^https:\/\//.test(c.url || "") ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">Open official document ↗</a>` : ""}
-    </div>`).join("");
+  $("srcFor").textContent = a.type === "tool" ? "Where the calculator's rates come from" : "Passages the selected answer cites";
+  const others = a.other_citations || [];
+  list.innerHTML = a.citations.map((c, i) => srcCard(c, `[${i + 1}] `, i === highlight, "src-" + i)).join("")
+    + (others.length ? `<details class="others"><summary>Other passages searched (${others.length})</summary>${others.map((c) => srcCard(c, "", false, "")).join("")}</details>` : "");
   if (highlight !== null) { const s = $("src-" + highlight); if (s) s.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
 }
 
@@ -908,7 +931,7 @@ async function ask(text) {
       answer = err.partial || { type: "not_found", answer: "Stopped before an answer arrived." };
       answer.stopped = true;
     } else {
-      answer = { type: "not_found", answer: "The backend did not respond (" + err.message + "). Check that the API server and Ollama are running." };
+      answer = { type: "not_found", answer: "The backend did not respond (" + err.message + "). Check that the API server is running." };
     }
   }
   removePending();
@@ -929,12 +952,14 @@ function sleep(ms, signal) {
 async function askOnce(body, signal) {
   addPending("Searching documents…");
   const res = await fetch(API_BASE + "/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  if (res.status === 429) return res.json();               // rate limit: the body is a normal answer
   if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
 }
 // Server-Sent Events over fetch: `meta`, then `token`*, then `done` with the full answer.
 async function askStream(body, signal) {
   const res = await fetch(API_BASE + "/api/chat/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  if (res.status === 429) return res.json();               // rate limit: the body is a normal answer
   if (!res.ok || !res.body) throw new Error("stream unavailable");
   const pending = addPending("Searching documents…");
   const reader = res.body.getReader();
@@ -1015,6 +1040,19 @@ $("exportChat").onclick = () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+async function loadRates() {
+  try {
+    const r = await fetch(API_BASE + "/api/rates").then((x) => x.json());
+    RATES = r && r.rates ? r.rates : null;
+  } catch (e) { RATES = null; }
+  const c = rateOf("pf.wage_ceiling");
+  $("kvPfCeiling").textContent = c ? `${fmtINR(c.value)} · ${c.source_doc || "rates.yaml"}` : "not configured";
+}
+function rateOf(key) {
+  const r = RATES && RATES[key];
+  return r && r.value != null ? r : null;
+}
+
 /* ============================ DEMO ENGINE (frontend-only) ============================
    Placeholder text in [brackets] marks values the real backend must take from documents.
    ==================================================================================== */
@@ -1027,17 +1065,38 @@ function demoAnswer(q, scope) {
     return { type: "not_found", answer: "I couldn't find this in my documents. I only cover Indian central and state labour and payroll rules, so I won't guess. Please check that country's official labour-law sources." };
   }
   if (/(pf|provident)/.test(t) && amount) {
-    const emp = amount * 0.12, epsBase = Math.min(amount, 15000), eps = epsBase * 0.0833, er = amount * 0.12, epf = er - eps;
+    // No legal figures in the frontend: with /api/rates loaded the demo uses those, otherwise [placeholders].
+    const [ceil, emp, er, eps, cap, edli] = ["pf.wage_ceiling", "pf.employee_rate", "pf.employer_rate", "pf.eps_rate",
+      "pf.eps_wage_cap", "pf.edli_rate"].map(rateOf);
+    if (ceil && emp && er && eps && cap && edli) {
+      const wage = Math.min(amount, ceil.value), epsBase = Math.min(amount, cap.value);
+      const e1 = wage * emp.value, e2 = wage * er.value, ep = epsBase * eps.value, ed = wage * edli.value;
+      const p = (x) => `${+(x * 100).toFixed(4)}%`;
+      return {
+        type: "tool", tool: `pf_calculator(basic=${amount})`,
+        answer: `PF for a basic wage of ${fmtINR(amount)}, using the PF wage ceiling of ${fmtINR(ceil.value)} from ${ceil.source_doc}:`,
+        table: { columns: ["Component", "Basis", "Amount"], totalRow: true, rows: [
+          ["PF wage", `up to the ceiling of ${fmtINR(ceil.value)}`, fmtINR(wage)],
+          ["Employee PF", `${p(emp.value)} of PF wage`, fmtINR(e1)],
+          ["Employer → EPS", `${p(eps.value)} of ${fmtINR(epsBase)}`, fmtINR(ep)],
+          ["Employer → EPF", `${p(er.value)} minus EPS share`, fmtINR(e2 - ep)],
+          ["Employer → EDLI", `${p(edli.value)} of PF wage`, fmtINR(ed)],
+          ["Total", "", fmtINR(e1 + e2 + ed)]
+        ]},
+        note: "Rates from data/rates.yaml via /api/rates.",
+        citations: [{ doc: ceil.source_doc, section: ceil.section || "", page: "", score: null, snippet: ceil.effective_from ? "Effective " + ceil.effective_from : "Effective date not configured", url: ceil.url || "" }]
+      };
+    }
     return {
       type: "tool", tool: `pf_calculator(basic=${amount})`,
       answer: `PF split for a basic wage of ${fmtINR(amount)} per month (contributions on actual basic):`,
       table: { columns: ["Component", "Basis", "Amount"], totalRow: true, rows: [
-        ["Employee PF", "12% of basic", fmtINR(emp)],
-        ["Employer → EPS", `8.33% of ${fmtINR(epsBase)} (wage cap)`, fmtINR(eps)],
-        ["Employer → EPF", "12% minus EPS share", fmtINR(epf)],
-        ["Total to PF", "", fmtINR(emp + er)]
+        ["Employee PF", "[employee rate] of basic", "[amount]"],
+        ["Employer → EPS", "[EPS rate] of basic up to the [EPS wage cap]", "[amount]"],
+        ["Employer → EPF", "[employer rate] minus EPS share", "[amount]"],
+        ["Total to PF", "", "[amount]"]
       ]},
-      note: "Arithmetic is done by Python, not the model. Rates come from the cited circular.",
+      note: "Arithmetic is done by Python, not the model. Rates come from data/rates.yaml and the cited circular.",
       citations: [{ doc: "EPFO contribution-rate circular", section: "[para]", page: "", score: null, snippet: "Effective [date]", url: "" }]
     };
   }
@@ -1175,10 +1234,19 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawe
 let toastTimer;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200); }
 
+// A free Render service sleeps when idle; the first request wakes it, which can take up to a minute.
+const WAKE_NOTICE_MS = 3000, WAKE_TIMEOUT_MS = 90000;
 async function checkHealth() {
+  const notice = $("notice");
+  const waking = setTimeout(() => {
+    notice.textContent = "Waking up the server, this takes up to a minute on the free plan…";
+    notice.classList.add("show");
+    $("statusText").textContent = "Waking up…";
+  }, WAKE_NOTICE_MS);
   try {
-    const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 2500);
+    const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), WAKE_TIMEOUT_MS);
     const r = await fetch(API_BASE + "/api/health", { signal: ctrl.signal });
+    clearTimeout(waking);
     if (!r.ok) throw new Error();
     const h = await r.json();
     LIVE = true;
@@ -1187,8 +1255,9 @@ async function checkHealth() {
     $("statusText").textContent = ok ? `${h.model} · ${h.docs} docs` : "Needs attention";
     $("statusPill").title = ok ? "Backend online" : (h.issues || []).join("\n");
     $("modeLabel").textContent = "live";
-    $("kvModel").textContent = "Ollama · " + (h.model || "?");
-    const notice = $("notice");
+    $("kvModel").textContent = (h.provider === "groq" ? "Groq · " : "Ollama · ") + (h.model || "?");
+    $("kvEmbed").textContent = h.embed_provider === "pinecone" ? "llama-text-embed-v2 (Pinecone)" : "bge-m3";
+    $("addSource").hidden = !!h.public_mode;               // the public demo can't add documents
     notice.textContent = ok ? "" : "Backend is up, but: " + (h.issues || []).join(" · ");
     notice.classList.toggle("show", !ok);
     try {
@@ -1196,7 +1265,10 @@ async function checkHealth() {
       if (Array.isArray(s) && s.length) { STATES = s; fillStateSelect(); }
     } catch (e) {}
     await loadDocuments();
+    await loadRates();
   } catch (e) {
+    clearTimeout(waking);
+    notice.classList.remove("show");
     LIVE = false;
     $("statusDot").classList.remove("on");
     $("statusText").textContent = "Demo mode";

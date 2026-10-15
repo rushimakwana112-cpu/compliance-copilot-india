@@ -11,6 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,22 +20,61 @@ LOGS_DIR = ROOT / "logs"
 FRONTEND_DIR = ROOT / "frontend"
 
 
+# llama-text-embed-v2 vs bge-m3. The Pinecone default only blocks clear nonsense: real tests showed relevant
+# definitions scoring 0.43 and an off-topic question passing 0.47, so the model's NOT_FOUND is the real guard.
+THRESHOLDS = {"pinecone": 0.38, "ollama": 0.55}
+
+
 class Settings(BaseSettings):
     """Runtime configuration. Field names map to upper-case env vars."""
 
     model_config = SettingsConfigDict(env_file=ROOT / ".env", env_file_encoding="utf-8", extra="ignore")
 
-    pinecone_api_key: str = ""
-    pinecone_index: str = "compliance-copilot"
+    # Which service writes answers: Groq in the cloud (free tier) or a local Ollama.
+    llm_provider: Literal["groq", "ollama"] = "groq"
+    groq_api_key: str = ""
+    groq_model: str = ""  # pick one from `python -m app.list_models`; never hard-coded
     ollama_url: str = "http://localhost:11434"
-    llm_model: str = "qwen2.5:7b"
-    embed_model: str = "bge-m3"
-    score_threshold: float = 0.55
+    llm_model: str = "qwen2.5:7b"  # the Ollama model
+    llm_temperature: float = 0.1
+    llm_max_tokens: int = 700
+
+    # Who turns text into vectors: Pinecone's hosted model (no local GPU/Ollama) or Ollama bge-m3.
+    embed_provider: Literal["pinecone", "ollama"] = "pinecone"
+    embed_model: str = "bge-m3"  # Ollama embedding model (embed_provider=ollama)
+    pinecone_embed_model: str = "llama-text-embed-v2"  # hosted model (embed_provider=pinecone)
+    pinecone_api_key: str = ""
+    pinecone_index: str = "compliance-copilot-cloud"
+    pinecone_namespace: str = "compliance"
+
+    # Below this raw similarity the answer is "not found". Each embedding model scores on its own scale,
+    # so the default depends on EMBED_PROVIDER; set SCORE_THRESHOLD to override after an eval sweep.
+    score_threshold: float | None = None  # always a float after _default_threshold
     router: Literal["rules", "llm"] = "rules"
 
-    # Retrieval knobs (tuned with the eval, see README)
-    top_k: int = 8
-    keep_k: int = 4
+    # Public demo: ingest endpoints off, per-IP limits on chat.
+    public_mode: bool = False
+    rate_limit_per_min: int = 10
+    rate_limit_per_day: int = 60
+    cache_size: int = 500
+
+    @model_validator(mode="after")
+    def _default_threshold(self) -> "Settings":
+        if self.score_threshold is None:
+            self.score_threshold = THRESHOLDS[self.embed_provider]
+        return self
+
+    @property
+    def active_model(self) -> str:
+        """The chat model in use for the selected provider."""
+        return self.groq_model if self.llm_provider == "groq" else self.llm_model
+
+    # Retrieval knobs (tuned with the eval, see README): fetch 12, re-rank, send the best 5 to the model.
+    top_k: int = 12
+    keep_k: int = 5
+    # Groq's free tier allows ~8,000 tokens per minute, so each answer's passages are capped at this many
+    # (estimated) tokens: neighbour context is trimmed first, then the lowest-ranked passages are dropped.
+    context_token_budget: int = 3000
     history_turns: int = 4
 
     # Ingestion limits for uploads
