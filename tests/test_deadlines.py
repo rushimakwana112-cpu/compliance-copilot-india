@@ -83,3 +83,9 @@ def test_null_due_date_is_not_guessed(rates):
 def test_calculation_with_due_word_still_calculates(rates):
     resp = tools.run("Calculate PF due for basic ₹18,000", scope(), rates, TODAY)
     assert resp.tool.startswith("pf_calculator")
+
+
+def test_api_rates_lists_due_dates(rates):
+    out = tools.resolved(rates, TODAY)["due_dates"]
+    assert out["pf"]["value"] == 12 and out["pf"]["source_doc"] == "Test PF scheme"
+    assert out["esic"]["value"] is None and out["professional_tax.gujarat"]["value"] == 18

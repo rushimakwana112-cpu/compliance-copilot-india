@@ -119,7 +119,7 @@ def rate(rates: dict[str, Any], key: str, on: date | None = None) -> Rate:
 def resolved(rates: dict[str, Any], on: date | None = None) -> dict[str, Any]:
     """Every figure as it applies on `on`, for GET /api/rates. Null values are listed, not hidden."""
     on = on or date.today()
-    out: dict[str, Any] = {"date": on.isoformat(), "rates": {}, "professional_tax": {}}
+    out: dict[str, Any] = {"date": on.isoformat(), "rates": {}, "professional_tax": {}, "due_dates": {}}
     for group in ("pf", "esic", "gratuity"):
         for name, node in (rates.get(group) or {}).items():
             v = pick(node, on)
@@ -132,6 +132,16 @@ def resolved(rates: dict[str, Any], on: date | None = None) -> dict[str, Any]:
         v = pick(node, on) or {}
         out["professional_tax"][state] = {
             "slabs": v.get("slabs") or [],
+            **{k: (None if (x := v.get(k)) in (None, "") else str(x))
+               for k in ("effective_from", "effective_to", "source_doc", "section", "status", "url")},
+        }
+    due = rates.get("due_dates") or {}
+    flat = {**{k: n for k, n in due.items() if k != "professional_tax"},
+            **{f"professional_tax.{st}": n for st, n in (due.get("professional_tax") or {}).items()}}
+    for name, node in flat.items():
+        v = pick(node, on) or {}
+        out["due_dates"][name] = {
+            "value": v.get("value"), "month_offset": v.get("month_offset"), "note": v.get("note"),
             **{k: (None if (x := v.get(k)) in (None, "") else str(x))
                for k in ("effective_from", "effective_to", "source_doc", "section", "status", "url")},
         }
