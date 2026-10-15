@@ -2,7 +2,7 @@
 
 PowerShell:
     python -m eval.run                         # full run (needs the LLM provider + Pinecone)
-    python -m eval.run --sweep 0.45,0.5,0.55,0.6,0.65   # also test refusal thresholds (retrieval only, no LLM)
+    python -m eval.run --sweep 0.4,0.43,0.47,0.5,0.55   # also test refusal thresholds (retrieval only, no LLM)
 
 Metrics
     route accuracy     the router picked the expected path (not_found questions are expected to route to rag)

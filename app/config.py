@@ -11,12 +11,16 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 LOGS_DIR = ROOT / "logs"
 FRONTEND_DIR = ROOT / "frontend"
+
+
+THRESHOLDS = {"pinecone": 0.47, "ollama": 0.55}  # llama-text-embed-v2 vs bge-m3
 
 
 class Settings(BaseSettings):
@@ -41,7 +45,9 @@ class Settings(BaseSettings):
     pinecone_index: str = "compliance-copilot-cloud"
     pinecone_namespace: str = "compliance"
 
-    score_threshold: float = 0.55
+    # Below this raw similarity the answer is "not found". Each embedding model scores on its own scale,
+    # so the default depends on EMBED_PROVIDER; set SCORE_THRESHOLD to override after an eval sweep.
+    score_threshold: float | None = None  # always a float after _default_threshold
     router: Literal["rules", "llm"] = "rules"
 
     # Public demo: ingest endpoints off, per-IP limits on chat.
@@ -50,14 +56,20 @@ class Settings(BaseSettings):
     rate_limit_per_day: int = 60
     cache_size: int = 500
 
+    @model_validator(mode="after")
+    def _default_threshold(self) -> "Settings":
+        if self.score_threshold is None:
+            self.score_threshold = THRESHOLDS[self.embed_provider]
+        return self
+
     @property
     def active_model(self) -> str:
         """The chat model in use for the selected provider."""
         return self.groq_model if self.llm_provider == "groq" else self.llm_model
 
-    # Retrieval knobs (tuned with the eval, see README)
-    top_k: int = 8
-    keep_k: int = 4
+    # Retrieval knobs (tuned with the eval, see README): fetch 12, re-rank, send the best 5 to the model.
+    top_k: int = 12
+    keep_k: int = 5
     history_turns: int = 4
 
     # Ingestion limits for uploads

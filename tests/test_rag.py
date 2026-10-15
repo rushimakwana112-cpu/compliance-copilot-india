@@ -231,3 +231,25 @@ def test_section_title_boost(services, store):
     wages = next(p for p in passages if p.section == "Section 17")
     assert bonus.rank_score - bonus.score == pytest.approx(rag.HEADING_BOOST) and wages.rank_score == wages.score
     assert passages[0].section == "Section 26"
+
+
+def test_threshold_and_retrieval_defaults_per_embedding_mode():
+    from app.config import Settings
+
+    assert Settings(_env_file=None).score_threshold == 0.47  # pinecone llama-text-embed-v2
+    assert Settings(_env_file=None, embed_provider="ollama").score_threshold == 0.55  # bge-m3
+    assert Settings(_env_file=None, score_threshold=0.6).score_threshold == 0.6  # explicit value wins
+    s = Settings(_env_file=None)
+    assert (s.top_k, s.keep_k) == (12, 5)
+
+
+def test_retrieval_fetches_top_k_and_keeps_keep_k(services, store):
+    for i in range(15):
+        store.add(f"gratuity rule number {i} for fixed term employee", doc=f"Doc {i}", section="S", page=i,
+                  scope="central", status="current", doc_type="act")
+    asked = []
+    real = store.search
+    store.search = lambda text, top_k, filter: asked.append(top_k) or real(text, top_k, filter)
+    services.settings.top_k, services.settings.keep_k = 12, 5
+    passages = rag.retrieve(services, "gratuity fixed term employee", Scope(["gujarat"], "default"))
+    assert asked == [12] and len(passages) == 5

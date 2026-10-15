@@ -163,7 +163,7 @@ try { Invoke-RestMethod "$url/api/ingest/url" -Method Post -ContentType "applica
 | `EMBED_MODEL` | `bge-m3` | The Ollama embedding model |
 | `PINECONE_API_KEY` | | Your Pinecone key. Secret |
 | `PINECONE_INDEX` | `compliance-copilot-cloud` | Index name; created if missing, never modified if it exists |
-| `SCORE_THRESHOLD` | `0.55` | Below this similarity the answer is "not found" without an LLM call |
+| `SCORE_THRESHOLD` | `0.47` (pinecone) / `0.55` (ollama) | Below this similarity the answer is "not found" without an LLM call. Leave unset to use the default for your embedding mode |
 | `ROUTER` | `rules` | `rules` or `llm` (JSON routing with a rules fallback) |
 | `PUBLIC_MODE` | `false` | `true` on the deployed demo (see above) |
 | `RATE_LIMIT_PER_MIN` | `10` | Chats per IP per minute in public mode |
@@ -220,7 +220,7 @@ Follow-ups are rewritten into a standalone question only when they clearly are o
 `eval/questions.csv` has 30 questions: 16 RAG (5 follow-ups), 5 calculator, 4 SQL and 5 trick questions that must be refused.
 
 ```powershell
-python -m eval.run --sweep 0.45,0.5,0.55,0.6,0.65
+python -m eval.run --sweep 0.4,0.43,0.47,0.5,0.55
 ```
 
 | Metric | Result |
@@ -233,7 +233,7 @@ python -m eval.run --sweep 0.45,0.5,0.55,0.6,0.65
 
 **Re-tune after switching embedding models.** `llama-text-embed-v2` and `bge-m3` score on different scales, so a threshold that works for one can refuse too much, or too little, with the other. Run the sweep once per mode.
 
-**Tuning log** (fill in as you tune): which `SCORE_THRESHOLD` and chunk size you started with, what the sweep showed, and what you changed. Defaults: threshold 0.55, chunks of 1,000 characters with 150 overlap, top_k 8 → keep 4.
+**Tuning log** (fill in as you tune): which `SCORE_THRESHOLD` and chunk size you started with, what the sweep showed, and what you changed. Defaults: threshold 0.47 for Pinecone embeddings and 0.55 for bge-m3; one chunk per defined term in Definitions sections (up to ~3,000 characters), other chunks up to ~1,800 characters with 200 overlap, cut only between sub-clauses; top_k 12 → re-rank → keep 5, each with its neighbouring chunks.
 
 ## Limitations
 
