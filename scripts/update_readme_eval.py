@@ -47,7 +47,10 @@ def render(report: dict[str, object]) -> str:
         why.append(f"{report['missing_docs']} because their documents aren't indexed yet")
     if report["rate_limited"]:
         why.append(f"{report['rate_limited']} because of Groq rate limits")
-    skipped = f", {report['skipped']} skipped" + (f" ({'; '.join(why)})" if why else "") if report["skipped"] else ""
+    if len(why) == 1 and int(why[0].split()[0]) == report["skipped"]:
+        skipped = f", {report['skipped']} skipped " + why[0].split(" ", 1)[1]  # "7 skipped because ..."
+    else:
+        skipped = f", {report['skipped']} skipped" + (f" ({'; '.join(why)})" if why else "") if report["skipped"] else ""
     note = (f"Note: measured on {report['asked']} questions{skipped}; small sample, so treat as indicative. "
             "Updated by scripts/run_all.ps1.")
     return "\n".join(rows) + "\n\n" + note + "\n"

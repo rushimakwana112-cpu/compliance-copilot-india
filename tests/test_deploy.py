@@ -114,7 +114,7 @@ def test_readme_eval_table_is_rewritten_from_the_report(services, store, llm, tm
     new = update(readme, report)
     block = new.split("<!-- eval-results:start")[1].split("<!-- eval-results:end -->")[0]
     assert "| route accuracy | 100% |" in block and "| not_found recall | 100% |" in block
-    assert "measured on 2 questions, 1 skipped (1 because their documents aren't indexed yet)" in block
+    assert "measured on 2 questions, 1 skipped because their documents aren't indexed yet" in block
     assert new.replace(block, "") == readme.replace(readme.split("<!-- eval-results:start")[1]
                                                     .split("<!-- eval-results:end -->")[0], "")  # nothing else changed
 
@@ -160,3 +160,22 @@ def test_no_secret_in_git_history():
     files = subprocess.run(["git", "log", "--all", "--name-only", "--format="], cwd=ROOT,
                            capture_output=True, text=True, check=True).stdout.split()
     assert ".env" not in files
+
+
+def test_public_readme_and_deploy_guide():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    top = readme.split("## How it works")[0]
+    assert "LIVE_URL_HERE" in top and "render.com/deploy?repo=" in top and top.count("\n1. ") + top.count("\n2. ") >= 2
+    for section in ("## How it works", "```mermaid", "## Sources used", "## Evaluation", "<!-- eval-results:start",
+                    "## Known free-tier limits", "## Not legal advice", "## Run it locally (Windows PowerShell)"):
+        assert section in readme, section
+    deploy = (ROOT / "DEPLOY.md").read_text(encoding="utf-8")
+    assert "GROQ_API_KEY" in deploy and "PINECONE_API_KEY" in deploy and "/api/health" in deploy
+
+
+def test_ci_runs_pytest_on_push_to_main():
+    wf = yaml.safe_load((ROOT / ".github" / "workflows" / "tests.yml").read_text())
+    on = wf.get("on", wf.get(True))  # YAML 1.1 reads the key `on` as True
+    assert on["push"]["branches"] == ["main"]
+    steps = " ".join(str(s.get("run", "")) for s in wf["jobs"]["pytest"]["steps"])
+    assert "pytest" in steps and "requirements-dev.txt" in steps
