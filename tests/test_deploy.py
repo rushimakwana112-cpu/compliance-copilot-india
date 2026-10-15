@@ -34,9 +34,21 @@ def test_render_blueprint_has_no_secret_values():
     svc = yaml.safe_load((ROOT / "render.yaml").read_text())["services"][0]
     assert svc["plan"] == "free" and "uvicorn app.main:app" in svc["startCommand"] and "$PORT" in svc["startCommand"]
     env = {e["key"]: e for e in svc["envVars"]}
-    for key in ("GROQ_API_KEY", "PINECONE_API_KEY", "GROQ_MODEL"):
+    for key in ("GROQ_API_KEY", "PINECONE_API_KEY"):
         assert env[key].get("sync") is False and "value" not in env[key]
     assert env["PUBLIC_MODE"]["value"] == "true"
+
+
+def test_render_blueprint_matches_the_deploy_plan():
+    svc = yaml.safe_load((ROOT / "render.yaml").read_text())["services"][0]
+    assert svc["runtime"] == "python" and svc["plan"] == "free"
+    assert svc["buildCommand"] == "pip install -r requirements.txt"
+    assert svc["startCommand"] == "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    assert svc["healthCheckPath"] == "/api/health"
+    values = {e["key"]: e.get("value") for e in svc["envVars"]}
+    assert values["LLM_PROVIDER"] == "groq" and values["EMBED_PROVIDER"] == "pinecone"
+    assert values["PUBLIC_MODE"] == "true" and values["SCORE_THRESHOLD"] == "0.38"
+    assert values["GROQ_MODEL"] == "qwen/qwen3.8-27b" and values["PINECONE_INDEX"] == "compliance-copilot-cloud"
 
 
 def test_sample_db_is_shipped():
@@ -77,7 +89,7 @@ def test_publish_readiness():
 
     svc = yaml.safe_load((ROOT / "render.yaml").read_text())["services"][0]
     env = {e["key"]: e for e in svc["envVars"]}
-    assert env["PUBLIC_MODE"]["value"] == "true" and svc["healthCheckPath"] == "/healthz"
+    assert env["PUBLIC_MODE"]["value"] == "true" and svc["healthCheckPath"] == "/api/health"
     s = Settings(_env_file=None)
     assert s.rate_limit_per_min > 0 and s.rate_limit_per_day > 0 and s.cache_size > 0
     ignored = [ln.strip() for ln in (ROOT / ".gitignore").read_text().splitlines()]
@@ -102,7 +114,7 @@ def test_readme_eval_table_is_rewritten_from_the_report(services, store, llm, tm
     new = update(readme, report)
     block = new.split("<!-- eval-results:start")[1].split("<!-- eval-results:end -->")[0]
     assert "| route accuracy | 100% |" in block and "| not_found recall | 100% |" in block
-    assert "measured on 2 questions, 1 skipped (1 because their documents aren't indexed yet)" in block
+    assert "measured on 2 questions, 1 skipped because their documents aren't indexed yet" in block
     assert new.replace(block, "") == readme.replace(readme.split("<!-- eval-results:start")[1]
                                                     .split("<!-- eval-results:end -->")[0], "")  # nothing else changed
 
@@ -125,3 +137,45 @@ def test_run_all_script_covers_every_step():
     positions = [body.index(step) for step in order]
     assert positions == sorted(positions)
     assert ps1.count("$LASTEXITCODE -ne 0") >= 1 and "STOPPED at:" in ps1
+
+
+def test_health_check_path_answers_200_even_when_degraded(settings, llm):
+    """Render restarts a service whose health check fails; a missing key must show as degraded, not a crash loop."""
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+    from app.services import Services
+
+    llm.healthy = False
+    with TestClient(create_app(Services(settings, llm, None, "PINECONE_API_KEY is not set"))) as c:
+        r = c.get("/api/health")
+    assert r.status_code == 200 and r.json()["status"] == "degraded"
+
+
+def test_no_secret_in_git_history():
+    log = subprocess.run(["git", "log", "--all", "-p"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    import re
+
+    assert not re.search(r"gsk_[A-Za-z0-9]{20,}|pcsk_[A-Za-z0-9_]{20,}", log)
+    files = subprocess.run(["git", "log", "--all", "--name-only", "--format="], cwd=ROOT,
+                           capture_output=True, text=True, check=True).stdout.split()
+    assert ".env" not in files
+
+
+def test_public_readme_and_deploy_guide():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    top = readme.split("## How it works")[0]
+    assert "LIVE_URL_HERE" in top and "render.com/deploy?repo=" in top and top.count("\n1. ") + top.count("\n2. ") >= 2
+    for section in ("## How it works", "```mermaid", "## Sources used", "## Evaluation", "<!-- eval-results:start",
+                    "## Known free-tier limits", "## Not legal advice", "## Run it locally (Windows PowerShell)"):
+        assert section in readme, section
+    deploy = (ROOT / "DEPLOY.md").read_text(encoding="utf-8")
+    assert "GROQ_API_KEY" in deploy and "PINECONE_API_KEY" in deploy and "/api/health" in deploy
+
+
+def test_ci_runs_pytest_on_push_to_main():
+    wf = yaml.safe_load((ROOT / ".github" / "workflows" / "tests.yml").read_text())
+    on = wf.get("on", wf.get(True))  # YAML 1.1 reads the key `on` as True
+    assert on["push"]["branches"] == ["main"]
+    steps = " ".join(str(s.get("run", "")) for s in wf["jobs"]["pytest"]["steps"])
+    assert "pytest" in steps and "requirements-dev.txt" in steps

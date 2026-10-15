@@ -1,0 +1,23 @@
+# Runs the test suite on every push to main (and on pull requests into main).
+# Groq and Pinecone are faked in the tests, so no secrets are needed here.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # tests/test_deploy.py scans the git history for secrets
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
