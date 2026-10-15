@@ -95,6 +95,7 @@ def early(services: Services, req: ChatRequest, which: str) -> tuple[Turn, ChatR
     scope = resolve(req.message, j.mode, j.state)
     trace = rag.Trace(index=services.settings.pinecone_index)
     if (resp := guards.check(req.message)) is not None:
+        resp.scope = _scope_out(scope)
         return Turn(req.message, req.message, scope, "guide", trace, which), resp
     text, history, today = req.message, req.history, date.today()
     resp = None
