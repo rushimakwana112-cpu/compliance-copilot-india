@@ -24,7 +24,7 @@ A portfolio project by **Cyber Panther**, built as a Learnbay assignment. India'
 ## How it works
 
 1. **Jurisdiction.** Central law is always searched; a state or city in the question (for example "Ahmedabad") adds that state's rules.
-2. **Routing.** A calculation ("PF for basic ₹20,000") goes to a Python calculator, a question about the synthetic sample employees goes to a guarded text-to-SQL agent, and everything else goes to retrieval.
+2. **Routing.** A calculation ("PF for basic ₹20,000") or a due date ("When is TDS on salary due?") goes to Python code that reads `data/rates.yaml`, a question about the synthetic sample employees goes to a guarded text-to-SQL agent, and everything else goes to retrieval.
 3. **Retrieval.** Pinecone searches the indexed documents (hosted `llama-text-embed-v2` embeddings), filtered to current law and the right scope. Low scores end in "not found" without calling the model.
 4. **Answer.** Groq's language model writes the answer from the numbered passages only and cites them; the page shows each citation with the document, section and page.
 
