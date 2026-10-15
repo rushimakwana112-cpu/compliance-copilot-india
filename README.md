@@ -2,7 +2,7 @@
 
 **Indian payroll and labour-law answers with citations to the official documents.** Ask about PF, ESIC, wages, bonus, gratuity, Professional Tax or TDS on salary. The copilot searches central law plus the right state, answers only from the retrieved passages, cites document and page, runs calculations in plain Python, and says *"not in my documents"* instead of guessing.
 
-A portfolio project by **Cyber Panther**, built as a Learnbay assignment. Everything runs locally: Ollama for the language model, Pinecone's free tier for vectors.
+A portfolio project by **Cyber Panther**, built as a Learnbay assignment. It runs two ways: **in the cloud for free** (Groq for the language model, Pinecone's hosted embeddings, deployed on Render), or **fully local** with Ollama. See [Two ways to run](#two-ways-to-run).
 
 > For reference only, not legal advice. Figures come only from the cited documents and from `data/rates.yaml`, which you fill in from official circulars.
 
@@ -31,14 +31,13 @@ flowchart LR
     T --> Y[(data/rates.yaml)]
     S --> DB[(sample_payroll.db<br/>read-only)]
     S --> Y
-    G -->|embed bge-m3| O[Ollama]
-    G -->|filter: status=current,<br/>scope in central+state| PC[(Pinecone)]
+    G -->|search by text<br/>filter: status=current,<br/>scope in central+state| PC[(Pinecone<br/>embeds with llama-text-embed-v2<br/>or bge-m3 via Ollama)]
     G -->|score below threshold| NF[not_found<br/>no LLM call]
-    G -->|numbered passages| O
-    O -->|qwen2.5:7b| G
+    G -->|numbered passages| O[LLM_PROVIDER<br/>Groq or Ollama]
+    O --> G
 
-    subgraph Ingestion [python -m ingest.run]
-      SRC[data/sources.csv] --> DL[download] --> PA[parse<br/>pypdf / OCR / HTML] --> CH[chunk<br/>by Section / Rule / FAQ] --> IX[embed + upsert]
+    subgraph Ingestion [python -m ingest.run, on your PC]
+      SRC[data/sources.csv] --> DL[download] --> PA[parse<br/>pypdf / OCR / HTML] --> CH[chunk<br/>by Section / Rule / FAQ] --> IX[upsert text]
     end
     IX --> PC
 ```
@@ -52,39 +51,124 @@ flowchart LR
 | `app/rag.py` | Retrieval, re-rank, threshold, prompt, citation cleanup, streaming |
 | `app/tools.py` | Calculators; read every figure from `data/rates.yaml` |
 | `app/sql_agent.py` | Few-shot text-to-SQL, sqlglot guard, read-only SQLite |
-| `app/llm.py`, `app/vectorstore.py` | Thin Ollama and Pinecone clients behind small interfaces |
+| `app/llm.py` | Groq and Ollama behind one interface (`LLM_PROVIDER`); same prompts, temperature 0.1, max 700 tokens |
+| `app/vectorstore.py` | Pinecone with hosted embeddings or with Ollama bge-m3 (`EMBED_PROVIDER`) |
+| `app/limits.py` | Public demo guards: per-IP rate limit and the answer cache |
+| `app/list_models.py` | `python -m app.list_models` prints the models your key can use |
 | `ingest/` | `download → parse → chunk → index`, run with `python -m ingest.run` |
 | `eval/` | 30 questions and the metrics runner |
 
-## Setup on Windows (PowerShell)
+## Two ways to run
 
-You need Python 3.11, [Ollama](https://ollama.com) and a free [Pinecone](https://www.pinecone.io) API key.
+| | Cloud (default) | Local |
+|---|---|---|
+| Language model | Groq API, free tier | Ollama, `qwen2.5:7b` on your PC |
+| Embeddings | Pinecone hosted `llama-text-embed-v2` | Ollama `bge-m3` |
+| Pinecone index | a new one with integrated embedding, e.g. `compliance-copilot-cloud` | your dense 1024-dim index, e.g. `compliance-copilot` |
+| You need | Python, a Groq key, a Pinecone key | Python, Ollama, a Pinecone key |
+| `.env` | `LLM_PROVIDER=groq`, `EMBED_PROVIDER=pinecone` | `LLM_PROVIDER=ollama`, `EMBED_PROVIDER=ollama` |
+
+The two embedding modes use different models, so their vectors can't share an index. Switching modes means switching `PINECONE_INDEX` and indexing the documents once for that index. Neither mode deletes or reconfigures an index it didn't create. You can also mix: `LLM_PROVIDER=ollama` with `EMBED_PROVIDER=pinecone` works.
+
+### Cloud mode on Windows (PowerShell)
+
+You need Python 3.11 or newer, a free [Groq](https://console.groq.com/keys) API key and a free [Pinecone](https://app.pinecone.io) API key. No Ollama.
 
 ```powershell
 # 1. Get the code and create a virtual environment
 git clone https://github.com/rushimakwana112-cpu/compliance-copilot-india.git; cd compliance-copilot-india; py -3.11 -m venv .venv; .\.venv\Scripts\Activate.ps1
 
-# 2. Install Python packages
-pip install -r requirements.txt
+# 2. Install the app plus the ingestion libraries (PDF parsing runs on your PC, not on the server)
+pip install -r requirements-ingest.txt
 
-# 3. Pull the two models (Ollama must be running)
-ollama pull qwen2.5:7b; ollama pull bge-m3
-
-# 4. Create .env, then open it and paste your PINECONE_API_KEY
+# 3. Create .env and paste GROQ_API_KEY and PINECONE_API_KEY
 Copy-Item .env.example .env; notepad .env
 
-# 5. Build the sample database and index the first two documents
-python scripts/make_sample_db.py; python -m ingest.run --limit 2
+# 4. See which models your Groq key can use, then put one id in GROQ_MODEL in .env
+python -m app.list_models
+
+# 5. Index the documents (creates the Pinecone index on the first run)
+python -m ingest.run --limit 2
 
 # 6. Start the app, then open http://localhost:8000
 uvicorn app.main:app --reload
 ```
 
-If the page shows **Needs attention**, hover the status dot or read the notice: `/api/health` says exactly what is missing (Ollama not running, a model not pulled, no Pinecone key). If the backend is not running at all, the page runs in **demo mode** with placeholder answers.
+**Picking a model:** `python -m app.list_models` lists the chat models available to your key and marks the Qwen and Llama ones. Prefer a Qwen or Llama model of about 30B parameters or more for answer quality, or a smaller "instant" Llama if you hit the free-tier limits; copy the id exactly. Groq retires and adds models regularly, so the code never hard-codes one. If the model you chose disappears, `/api/health` says so.
 
-Run the tests (no Ollama or Pinecone needed; both are faked): `python -m pytest`
+### Local mode with Ollama (PowerShell)
 
-**Optional OCR for scanned PDFs:** install [Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) and [Poppler](https://github.com/oschwartz10612/poppler-windows/releases), add both to `PATH`, then `pip install pytesseract pdf2image`. Without them, scanned pages are skipped with a warning.
+```powershell
+pip install -r requirements-ingest.txt
+ollama pull qwen2.5:7b; ollama pull bge-m3
+Copy-Item .env.example .env; notepad .env   # set LLM_PROVIDER=ollama, EMBED_PROVIDER=ollama, PINECONE_INDEX=<your dense index>
+python scripts/make_sample_db.py; python -m ingest.run --limit 2
+uvicorn app.main:app --reload
+```
+
+If the page shows **Needs attention**, hover the status dot or read the notice: `/api/health` says exactly what is missing (no key, a model not set or not pulled, Ollama not running, the wrong index type). If the backend is not running at all, the page runs in **demo mode** with placeholder answers.
+
+Run the tests (no Groq, Ollama or Pinecone needed; all are faked): `pip install -r requirements-dev.txt; python -m pytest`
+
+**Optional OCR for scanned PDFs:** install [Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) and [Poppler](https://github.com/oschwartz10612/poppler-windows/releases), add both to `PATH`, then uncomment the OCR lines in `requirements-ingest.txt` and reinstall. Without them, scanned pages are skipped with a warning.
+
+## Deploy free on Render
+
+The server only answers questions; documents are indexed from your PC into Pinecone, and the deployed app reads the same index. `render.yaml` describes the service, so Render sets most of it up for you.
+
+```powershell
+# 1. On your PC, in cloud mode: index the documents and check answers locally first (see above)
+python -m ingest.run
+python -m eval.run
+
+# 2. Optional: commit the document list so the deployed sidebar shows it (names, URLs and hashes only, no secrets)
+git add data/manifest.json; git commit -m "Indexed documents"; git push
+
+# 3. Never commit .env. This must print nothing:
+git ls-files .env
+```
+
+4. Open [dashboard.render.com](https://dashboard.render.com), choose **New → Blueprint**, connect GitHub and pick `compliance-copilot-india` and the branch to deploy.
+5. Render reads `render.yaml` and asks for the four secret values: `GROQ_API_KEY`, `GROQ_MODEL`, `PINECONE_API_KEY` and `PINECONE_INDEX` (the index you ingested into). `PUBLIC_MODE=true`, `LLM_PROVIDER=groq` and `EMBED_PROVIDER=pinecone` are already set. Click **Apply**.
+6. When the deploy is live, check it from PowerShell (use your service's URL):
+
+```powershell
+$url = "https://compliance-copilot.onrender.com"
+Invoke-RestMethod "$url/api/health"            # status ok, provider groq, public_mode True
+Invoke-RestMethod "$url/api/chat" -Method Post -ContentType "application/json" -Body '{"message":"Is gratuity payable to a fixed term employee?"}'
+try { Invoke-RestMethod "$url/api/ingest/url" -Method Post -ContentType "application/json" -Body '{"url":"https://example.gov.in/a.pdf"}' } catch { $_.Exception.Response.StatusCode }   # Forbidden
+```
+
+**What the free plan means:** the service sleeps after about 15 minutes without visitors, and the next visit wakes it, which can take up to a minute. The page shows *"Waking up the server…"* while that happens. The app starts at about 60 MB of RAM (the free instance has 512 MB) because `requirements.txt` holds only the web app; PDF and OCR libraries are in `requirements-ingest.txt` and never installed on Render.
+
+**What public mode does** (`PUBLIC_MODE=true`):
+
+- `/api/ingest/*` returns 403 and the page hides the upload and link boxes.
+- Each IP may ask 10 questions a minute and 60 a day; over that, the answer explains the limit (HTTP 429 with `Retry-After`).
+- The last 500 answers are cached by question and jurisdiction, so repeated questions cost no Groq tokens.
+- Messages are limited to 1,000 characters and history to the last 4 turns.
+- When Groq's own free quota runs out, the answer is *"Daily demo limit reached. Please try again later."*
+- Keys stay on the server: `/api/health` reports the provider and model, never a key.
+
+## Environment variables
+
+| Variable | Default | What it does |
+|---|---|---|
+| `LLM_PROVIDER` | `groq` | `groq` (cloud) or `ollama` (local) |
+| `GROQ_API_KEY` | | Your Groq key. Secret |
+| `GROQ_MODEL` | | A model id from `python -m app.list_models` |
+| `OLLAMA_URL` | `http://localhost:11434` | Where Ollama runs |
+| `LLM_MODEL` | `qwen2.5:7b` | The Ollama chat model |
+| `EMBED_PROVIDER` | `pinecone` | `pinecone` (hosted `llama-text-embed-v2`) or `ollama` (`bge-m3`) |
+| `EMBED_MODEL` | `bge-m3` | The Ollama embedding model |
+| `PINECONE_API_KEY` | | Your Pinecone key. Secret |
+| `PINECONE_INDEX` | `compliance-copilot-cloud` | Index name; created if missing, never modified if it exists |
+| `SCORE_THRESHOLD` | `0.55` | Below this similarity the answer is "not found" without an LLM call |
+| `ROUTER` | `rules` | `rules` or `llm` (JSON routing with a rules fallback) |
+| `PUBLIC_MODE` | `false` | `true` on the deployed demo (see above) |
+| `RATE_LIMIT_PER_MIN` | `10` | Chats per IP per minute in public mode |
+| `RATE_LIMIT_PER_DAY` | `60` | Chats per IP per day in public mode |
+| `CACHE_SIZE` | `500` | Answers kept in the cache; `0` turns it off |
 
 ## How jurisdiction works
 
@@ -117,13 +201,14 @@ then run `python -m ingest.run --only "ESIC"`. Files are downloaded once into `d
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/health` | `{status, model, pinecone, docs, ollama, issues[]}` |
+| `GET /api/health` | `{status, model, provider, embed_provider, llm_ok, pinecone, docs, public_mode, issues[]}`. Checks the Groq key with a free models-list call |
+| `GET /healthz` | `{ok: true}` with no outside calls, for Render's health check |
 | `GET /api/documents` | `[{name, scope, status, meta}]`: indexed, indexing and planned documents |
 | `GET /api/states` | `[{id, name, aliases[]}]` |
-| `POST /api/chat` | `{message, history[], jurisdiction}` → `{type: rag\|tool\|sql\|not_found, answer, scope, citations[], table?, tool?, sql?, rows_scanned?, note?, latency_ms}` |
+| `POST /api/chat` | `{message (≤ 1,000 chars), history[] (last 4 turns used), jurisdiction}` → `{type: rag\|tool\|sql\|not_found, answer, scope, citations[], table?, tool?, sql?, rows_scanned?, note?, latency_ms, cached?, quota_exceeded?}`. In public mode, 429 with the same shape when the IP is over its limit |
 | `POST /api/chat/stream` | Server-Sent Events: `meta`, then `token`…, then `done` with the same JSON as `/api/chat` |
-| `POST /api/ingest/file` | multipart `file` (PDF ≤ 20 MB) + `scope`; indexes in the background |
-| `POST /api/ingest/url` | `{url (https), scope}`; downloads and indexes in the background |
+| `POST /api/ingest/file` | multipart `file` (PDF ≤ 20 MB) + `scope`; indexes in the background. 403 in public mode |
+| `POST /api/ingest/url` | `{url (https), scope}`; downloads and indexes in the background. 403 in public mode |
 | `POST /api/feedback` | appends to `logs/feedback.jsonl` (thumbs-down questions are eval candidates) |
 
 Every chat is logged to `logs/chats.jsonl` with the scope, route, top scores and latency.
@@ -144,6 +229,8 @@ python -m eval.run --sweep 0.45,0.5,0.55,0.6,0.65
 | not_found precision / recall | _run the eval_ |
 | Median latency | _run the eval_ |
 
+**Re-tune after switching embedding models.** `llama-text-embed-v2` and `bge-m3` score on different scales, so a threshold that works for one can refuse too much, or too little, with the other. Run the sweep once per mode.
+
 **Tuning log** (fill in as you tune): which `SCORE_THRESHOLD` and chunk size you started with, what the sweep showed, and what you changed. Defaults: threshold 0.55, chunks of 1,000 characters with 150 overlap, top_k 8 → keep 4.
 
 ## Limitations
@@ -154,6 +241,8 @@ python -m eval.run --sweep 0.45,0.5,0.55,0.6,0.65
 - The SQL agent works on the synthetic sample table only; it never sees real employee data.
 - A 7B local model can still misread a passage. The threshold, citation cleanup and NOT_FOUND rule reduce this but don't remove it.
 - Scanned PDFs need Tesseract and Poppler for OCR.
+- The public demo's rate limit and cache live in memory: a restart resets them, and the per-IP count trusts the first `X-Forwarded-For` address, which a determined user can fake. Groq's own free-tier limit is the real ceiling.
+- Groq's free tier has per-minute and per-day token limits; a busy demo will hit them and answer with the daily-limit message.
 
 ## Future work
 
@@ -162,6 +251,7 @@ python -m eval.run --sweep 0.45,0.5,0.55,0.6,0.65
 - Per-document "last checked" dates and alerts when an official URL changes its hash.
 - More state rules (Shops & Establishments, state rules under the Codes) and a TDS calculator.
 - Feed thumbs-down questions from `logs/feedback.jsonl` into the eval set automatically.
+- Keep the rate limit and cache in a small Redis so they survive restarts and work across several instances.
 
 ## Project structure
 
@@ -171,7 +261,11 @@ ingest/     download → parse → chunk → index
 frontend/   index.html (single file, no framework)
 data/       sources.csv, rates.yaml, states.yaml, sql_examples.yaml, sample_payroll.db
 eval/       questions.csv, run.py, report.md
-tests/      pytest suite with fake Ollama and Pinecone
+tests/      pytest suite with fake Groq, Ollama and Pinecone
+render.yaml                Render Blueprint for the free web service
+requirements.txt           the web app only (what Render installs)
+requirements-ingest.txt    + PDF parsing and the ingestion CLI (your PC)
+requirements-dev.txt       + pytest
 scripts/    make_sample_db.py
 docs/       build-log.md (what each build step teaches), screenshots/
 ```

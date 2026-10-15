@@ -1,7 +1,7 @@
 """Evaluate the whole pipeline on eval/questions.csv and write eval/report.md.
 
 PowerShell:
-    python -m eval.run                         # full run (needs Ollama + Pinecone)
+    python -m eval.run                         # full run (needs the LLM provider + Pinecone)
     python -m eval.run --sweep 0.45,0.5,0.55,0.6,0.65   # also test refusal thresholds (retrieval only, no LLM)
 
 Metrics
@@ -140,7 +140,8 @@ def write_report(results: list[Result], summary: dict, services: Services,
     s = services.settings
     lines = [
         "# Evaluation report", "",
-        f"Run {datetime.now():%Y-%m-%d %H:%M} · model `{s.llm_model}` · embeddings `{s.embed_model}` · "
+        f"Run {datetime.now():%Y-%m-%d %H:%M} · model `{s.llm_provider}:{s.active_model}` · embeddings "
+        f"`{s.pinecone_embed_model if s.embed_provider == 'pinecone' else s.embed_model}` · "
         f"threshold {s.score_threshold} · top_k {s.top_k} → keep {s.keep_k} · chunks {MAX_CHARS} chars / {OVERLAP} overlap · router `{s.router}`",
         "", "| Metric | Value | n |", "|---|---|---|",
     ]

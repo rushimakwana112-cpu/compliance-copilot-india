@@ -69,3 +69,37 @@ One colour was added (none changed): `--accent-2-text` (#865C10) in the light th
 `README.md` covers the problem, a Mermaid architecture diagram, screenshots of both themes, six PowerShell setup commands, how jurisdiction works, how to add a document, the eval table (to fill after your first run), limitations and future work.
 
 **What to learn:** a README is the interface of a portfolio project. A reviewer decides in a minute whether to read your code, and the architecture diagram plus an honest limitations section usually decide it.
+
+# Phase 2: free in the cloud with Groq
+
+Goal: the same copilot, deployed for free, while the local Ollama mode keeps working. Five steps, one commit each, tests after every step (113 pass at the end).
+
+## Step 1: a provider layer for the language model
+
+`LLM_PROVIDER=groq|ollama` picks a client in `app/llm.py`; both get the same prompts, temperature 0.1 and 700 max tokens, so the NOT_FOUND rule and the router's JSON behave the same. `python -m app.list_models` prints what your Groq key can use. A Groq 429 becomes the answer *"Daily demo limit reached. Please try again later."* with `quota_exceeded: true`; a timeout is retried once after a short pause.
+
+**What to learn:** code against an interface, not a vendor. The pipeline only ever calls `chat`, `stream` and `health`, so adding Groq touched one file plus settings. Also notice which errors deserve a retry: a timeout is usually temporary, but a 429 means "you are over quota", and retrying it only burns more quota. Never hard-code a hosted model id; providers retire them, so list them at runtime and let configuration choose.
+
+## Step 2: embeddings without Ollama
+
+`EMBED_PROVIDER=pinecone` creates a new index with Pinecone's integrated embedding (`llama-text-embed-v2`, `field_map: text`). We upsert plain text plus metadata and search by text with the same jurisdiction filter, so ingestion needs only Python and the Pinecone key. `EMBED_PROVIDER=ollama` keeps the bge-m3 path. Neither mode touches an index it didn't create; pointing one mode at the other's index is refused with a clear message.
+
+**What to learn:** an embedding model defines a vector space, and vectors from two models can't be compared, so each model needs its own index. Similarity scores also change scale between models, which is why `SCORE_THRESHOLD` must be re-tuned with the eval sweep after switching. Hosted ("integrated") embedding moves the heavy model off your machine: the trade-off is less control over the model in exchange for a tiny server.
+
+## Step 3: public mode
+
+`PUBLIC_MODE=true` blocks `/api/ingest/*` with a 403 (checked in middleware, before the upload is read) and the page hides the upload box. Each IP gets 10 chats a minute and 60 a day; a 500-entry LRU cache answers repeated questions without calling Groq and is emptied after any ingestion. Messages are capped at 1,000 characters and history at 4 turns.
+
+**What to learn:** a public demo needs guards a local tool doesn't. Rate limits protect your free quota; a cache keyed by the *standalone* question plus the jurisdiction means "What is the PF rate?" and "what is the pf rate" share an answer, but Gujarat and Kerala don't. Only cache successes: a refusal or a quota error might succeed next time. And know the limits of your own guard: an IP read from `X-Forwarded-For` can be faked, so the limiter stops casual overuse, not attackers.
+
+## Step 4: deploy on Render
+
+`render.yaml` is a Render Blueprint: free Python service, `pip install -r requirements.txt`, `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, secrets entered in the dashboard (`sync: false`), and a `/healthz` check that makes no outside calls. Requirements are split: the web app (about 60 MB of RAM at start), ingestion (`pypdf`, `bs4`, `rich`, optional OCR) and tests. The page shows *"Waking up the server…"* when `/api/health` takes over 3 seconds.
+
+**What to learn:** free hosting is a set of constraints you design for. 512 MB rules out torch, so the server must not do embedding or PDF parsing, and that pushes work to build time (ingestion on your PC) and to managed services (Groq, Pinecone). A sleeping free instance is a user-experience problem, solved in the UI. Keep secrets out of git entirely: config files list *which* variables exist, the platform stores the values.
+
+## Step 5: tests and docs
+
+New tests fake the Groq SDK and Pinecone to cover provider switching, the 429 path through both chat endpoints, the timeout retry, integrated-index creation and refusal, public mode blocking ingest, the rate limiter (minute window, daily reset, 429 body), the cache (LRU order, scope in the key, copies, cleared by ingestion) and deployment guards (no heavy packages in `requirements.txt`, no secret values in `render.yaml`). README now has "Two ways to run", "Deploy free on Render" and the environment variable table.
+
+**What to learn:** fakes make cloud code testable offline and for free. A test that asserts `requirements.txt` has no torch, or that `render.yaml` holds no key, turns a deployment rule into something CI checks for you instead of something you have to remember.
