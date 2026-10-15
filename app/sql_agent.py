@@ -42,7 +42,8 @@ SCHEMA_TEXT = """Table employees (synthetic sample data, one row per employee):
 # Named parameters the model may use, and where their values come from.
 PARAMS = {
     "esic_ceiling": "esic.wage_ceiling",
-    "eps_wage_ceiling": "pf.eps_wage_ceiling",
+    "pf_wage_ceiling": "pf.wage_ceiling",
+    "eps_wage_ceiling": "pf.eps_wage_cap",
     "gratuity_min_years": "gratuity.min_years_permanent",
 }
 FORBIDDEN = tuple(getattr(exp, n) for n in ("Insert", "Update", "Delete", "Drop", "Create", "Alter", "Command",
@@ -172,7 +173,8 @@ SYSTEM = f"""You write one SQLite SELECT query for a question about a synthetic 
 Rules:
 - One SELECT statement only. Only the employees table and the columns above.
 - Never write legal thresholds as numbers. Use these named parameters instead:
-  :esic_ceiling (ESIC wage ceiling), :eps_wage_ceiling (EPS wage ceiling), :gratuity_min_years (gratuity minimum service).
+  :esic_ceiling (ESIC wage ceiling), :pf_wage_ceiling (PF wage ceiling), :eps_wage_ceiling (EPS wage cap),
+  :gratuity_min_years (gratuity minimum service).
 - Numbers the user typed themselves may be written as literals.
 - Reply with only the query inside a ```sql code block. No explanation."""
 

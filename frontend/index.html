@@ -483,6 +483,7 @@ pre.code {
           <dt>Vector DB</dt><dd>Pinecone</dd>
           <dt>Data</dt><dd>sample_payroll.db</dd>
           <dt>Mode</dt><dd id="modeLabel">demo</dd>
+          <dt>PF ceiling</dt><dd id="kvPfCeiling" title="From data/rates.yaml via /api/rates">[from rates.yaml]</dd>
         </dl>
       </section>
     </aside>
@@ -532,6 +533,7 @@ pre.code {
    ================================================================== */
 const API_BASE = "";   // e.g. "http://localhost:8000" when opening this file directly
 let LIVE = false;
+let RATES = null;   // live mode: GET /api/rates (data/rates.yaml, the version valid today); never hard-coded
 
 // Fallback list; replaced by GET /api/states when the backend is up.
 let STATES = [
@@ -1038,6 +1040,19 @@ $("exportChat").onclick = () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+async function loadRates() {
+  try {
+    const r = await fetch(API_BASE + "/api/rates").then((x) => x.json());
+    RATES = r && r.rates ? r.rates : null;
+  } catch (e) { RATES = null; }
+  const c = rateOf("pf.wage_ceiling");
+  $("kvPfCeiling").textContent = c ? `${fmtINR(c.value)} · ${c.source_doc || "rates.yaml"}` : "not configured";
+}
+function rateOf(key) {
+  const r = RATES && RATES[key];
+  return r && r.value != null ? r : null;
+}
+
 /* ============================ DEMO ENGINE (frontend-only) ============================
    Placeholder text in [brackets] marks values the real backend must take from documents.
    ==================================================================================== */
@@ -1050,7 +1065,28 @@ function demoAnswer(q, scope) {
     return { type: "not_found", answer: "I couldn't find this in my documents. I only cover Indian central and state labour and payroll rules, so I won't guess. Please check that country's official labour-law sources." };
   }
   if (/(pf|provident)/.test(t) && amount) {
-    // No legal figures in the frontend: offline the rates are [placeholders].
+    // No legal figures in the frontend: with /api/rates loaded the demo uses those, otherwise [placeholders].
+    const [ceil, emp, er, eps, cap, edli] = ["pf.wage_ceiling", "pf.employee_rate", "pf.employer_rate", "pf.eps_rate",
+      "pf.eps_wage_cap", "pf.edli_rate"].map(rateOf);
+    if (ceil && emp && er && eps && cap && edli) {
+      const wage = Math.min(amount, ceil.value), epsBase = Math.min(amount, cap.value);
+      const e1 = wage * emp.value, e2 = wage * er.value, ep = epsBase * eps.value, ed = wage * edli.value;
+      const p = (x) => `${+(x * 100).toFixed(4)}%`;
+      return {
+        type: "tool", tool: `pf_calculator(basic=${amount})`,
+        answer: `PF for a basic wage of ${fmtINR(amount)}, using the PF wage ceiling of ${fmtINR(ceil.value)} from ${ceil.source_doc}:`,
+        table: { columns: ["Component", "Basis", "Amount"], totalRow: true, rows: [
+          ["PF wage", `up to the ceiling of ${fmtINR(ceil.value)}`, fmtINR(wage)],
+          ["Employee PF", `${p(emp.value)} of PF wage`, fmtINR(e1)],
+          ["Employer → EPS", `${p(eps.value)} of ${fmtINR(epsBase)}`, fmtINR(ep)],
+          ["Employer → EPF", `${p(er.value)} minus EPS share`, fmtINR(e2 - ep)],
+          ["Employer → EDLI", `${p(edli.value)} of PF wage`, fmtINR(ed)],
+          ["Total", "", fmtINR(e1 + e2 + ed)]
+        ]},
+        note: "Rates from data/rates.yaml via /api/rates.",
+        citations: [{ doc: ceil.source_doc, section: ceil.section || "", page: "", score: null, snippet: ceil.effective_from ? "Effective " + ceil.effective_from : "Effective date not configured", url: ceil.url || "" }]
+      };
+    }
     return {
       type: "tool", tool: `pf_calculator(basic=${amount})`,
       answer: `PF split for a basic wage of ${fmtINR(amount)} per month (contributions on actual basic):`,
@@ -1229,6 +1265,7 @@ async function checkHealth() {
       if (Array.isArray(s) && s.length) { STATES = s; fillStateSelect(); }
     } catch (e) {}
     await loadDocuments();
+    await loadRates();
   } catch (e) {
     clearTimeout(waking);
     notice.classList.remove("show");

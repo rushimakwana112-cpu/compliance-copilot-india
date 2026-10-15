@@ -196,7 +196,7 @@ https://…/notification.pdf,"ESIC wage-ceiling notification",central,current,20
 
 then run `python -m ingest.run --only "ESIC"`. Files are downloaded once into `data/raw/` with their sha256 in `data/manifest.json`. Re-running is safe: unchanged files are skipped, and a changed file's old vectors are deleted before re-indexing (preview with `--dry-run`). After a change to the chunking, run `python -m ingest.run --reindex`: it deletes every document's old vectors and indexes it again, including PDFs uploaded from the sidebar. `scope` is `central` or a state id; `status` is `current`, `repealed` or `historical`.
 
-**Rates for the calculators** live only in `data/rates.yaml`. Each value has `source_doc` and `effective_date`; the shipped file has every value as `null`, so calculators answer *"rate not configured"* until you fill them from the official circular.
+**Rates for the calculators** live only in `data/rates.yaml`. Each figure is a list of dated versions (`value`, `effective_from`, `effective_to`, `source_doc`, `section`, `status`). Calculators use the version valid today, or on a date written in the question ("PF for basic 20000 on 1 March 2026"), and the PF answer names the wage ceiling and notification it used. A `null` value answers *"Rate not configured: <field>"*. The shipped file has only the two PF wage ceilings (₹15,000 historical, ₹25,000 from the Gazette notification of 17 Sept 2026); everything else is `null` until filled from the official document. `GET /api/rates` shows every figure as it applies today (`?on=YYYY-MM-DD` for another date).
 
 ## API
 

@@ -170,3 +170,9 @@ Search (tracked files): `git grep -nE "15000|15,000|21000|21,000|8\.33|0\.0833|0
 A new test (`tests/test_deploy.py`) fails if a legal-looking number (PF/EPS/ESIC rates or ceilings) appears in `app/`, `ingest/`, `scripts/` or `frontend/`.
 
 **What to learn:** audit first, then change. A blind search-and-replace for "15000" would have broken the example questions, which are salaries a user typed. Only figures that state the law (rates, ceilings) belong in rates.yaml, with the document they came from.
+
+## Dated rates: the law changes, so every figure has a date
+
+`data/rates.yaml` now stores each figure as a list of versions with `effective_from`, `effective_to`, `source_doc`, `section` and `status`. The PF wage ceiling has two: ₹15,000 (historical) and ₹25,000 (Gazette notification of 17 Sept 2026; its effective date is left for Rushi to fill from the notification). The calculators pick the version valid today, or on a date written in the question, and the PF answer says which ceiling and notification it used. PF is now computed on the PF wage (basic up to the ceiling), with EPS up to the separate EPS wage cap and an EDLI line. `GET /api/rates` returns every figure as it applies on a date, with nulls listed; the frontend shows the PF ceiling in live mode, and its offline PF demo uses those rates when it has them. Tests use made-up figures in `tests/fixtures/rates.yaml`.
+
+**What to learn:** a legal figure is not a constant; it is a value *with a validity period and a source*. Storing versions instead of overwriting means old questions ("what was the ceiling in March 2026?") still get the right answer, and every number on screen can be traced to a document.

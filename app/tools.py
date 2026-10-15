@@ -3,8 +3,10 @@
 Plain Python, no LLM. Language models are unreliable at arithmetic, and a
 payroll figure that is off by one rupee is wrong, so the model never computes.
 Every rate comes from data/rates.yaml together with the document it was taken
-from, and that document is returned as the answer's citation. A rate that
-hasn't been filled in yields "rate not configured", never a guess.
+from, and that document is returned as the answer's citation. Each figure is a
+list of dated versions; the one valid on today's date (or on a date written in
+the question) is used. A rate that hasn't been filled in yields
+"Rate not configured: <field>", never a guess.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -39,8 +42,15 @@ class Rate:
     value: float
     source_doc: str
     section: str = ""
-    effective_date: str = ""
+    effective_from: str = ""
     url: str = ""
+    effective_to: str = ""
+    status: str = ""
+
+    def label(self) -> str:
+        """'Gazette notification 17 Sept 2026, effective 2026-10-01' (or 'effective date not configured')."""
+        when = f"effective {self.effective_from}" if self.effective_from else "effective date not configured"
+        return f"{self.source_doc or 'data/rates.yaml'}, {when}"
 
 
 @lru_cache
@@ -53,15 +63,78 @@ def load_rates(path: Path | None = None) -> dict[str, Any]:
     return _load(path or RATES_PATH)
 
 
-def rate(rates: dict[str, Any], key: str) -> Rate:
-    """Look up 'pf.employee_rate' → Rate, or raise RateMissing if the value is null."""
+def _date(value: Any) -> date | None:
+    """YAML gives dates as date objects ('2026-10-01' unquoted) or strings; null stays None."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def versions(node: Any) -> list[dict[str, Any]]:
+    """The dated versions of one figure. A single {value: …} mapping (the old format) is one version."""
+    if isinstance(node, list):
+        return [v for v in node if isinstance(v, dict)]
+    return [node] if isinstance(node, dict) and ("value" in node or "slabs" in node) else []
+
+
+def pick(node: Any, on: date | None = None) -> dict[str, Any] | None:
+    """The version valid on `on` (default today). Among several valid ones (e.g. dates not filled in yet),
+    a `current` one beats a `historical` one, then the latest effective_from wins."""
+    on = on or date.today()
+    valid = [v for v in versions(node)
+             if (_date(v.get("effective_from")) or date.min) <= on <= (_date(v.get("effective_to")) or date.max)]
+    if not valid:
+        return None
+    return max(valid, key=lambda v: (v.get("status", "current") != "historical",
+                                     _date(v.get("effective_from")) or date.min))
+
+
+def _node(rates: dict[str, Any], key: str) -> Any:
     node: Any = rates
     for part in key.split("."):
-        node = (node or {}).get(part) if isinstance(node, dict) else None
-    if not isinstance(node, dict) or node.get("value") is None:
-        raise RateMissing(key, (node or {}).get("source_doc", "") if isinstance(node, dict) else "")
-    return Rate(float(node["value"]), node.get("source_doc", ""), node.get("section", "") or "",
-                str(node.get("effective_date") or ""), node.get("url", "") or "")
+        node = node.get(part) if isinstance(node, dict) else None
+    return node
+
+
+def _rate_of(v: dict[str, Any], value: float) -> Rate:
+    return Rate(value, v.get("source_doc", "") or "", v.get("section", "") or "",
+                str(v.get("effective_from") or v.get("effective_date") or ""), v.get("url", "") or "",
+                str(v.get("effective_to") or ""), v.get("status", "") or "")
+
+
+def rate(rates: dict[str, Any], key: str, on: date | None = None) -> Rate:
+    """Look up 'pf.employee_rate' on a date → Rate, or raise RateMissing if no version applies or its value is null."""
+    v = pick(_node(rates, key), on)
+    if v is None or v.get("value") is None:
+        raise RateMissing(key, (v or {}).get("source_doc", ""))
+    return _rate_of(v, float(v["value"]))
+
+
+def resolved(rates: dict[str, Any], on: date | None = None) -> dict[str, Any]:
+    """Every figure as it applies on `on`, for GET /api/rates. Null values are listed, not hidden."""
+    on = on or date.today()
+    out: dict[str, Any] = {"date": on.isoformat(), "rates": {}, "professional_tax": {}}
+    for group in ("pf", "esic", "gratuity"):
+        for name, node in (rates.get(group) or {}).items():
+            v = pick(node, on)
+            out["rates"][f"{group}.{name}"] = {
+                "value": None if v is None else v.get("value"),
+                **({k: (None if (x := (v or {}).get(k)) in (None, "") else str(x))
+                    for k in ("effective_from", "effective_to", "source_doc", "section", "status", "url")}),
+            }
+    for state, node in (rates.get("professional_tax") or {}).items():
+        v = pick(node, on) or {}
+        out["professional_tax"][state] = {
+            "slabs": v.get("slabs") or [],
+            **{k: (None if (x := v.get(k)) in (None, "") else str(x))
+               for k in ("effective_from", "effective_to", "source_doc", "section", "status", "url")},
+        }
+    return out
 
 
 def inr(amount: float) -> str:
@@ -83,38 +156,45 @@ def _cite(*rates_used: Rate) -> list[Citation]:
     seen: dict[str, Citation] = {}
     for r in rates_used:
         if r.source_doc and r.source_doc not in seen:
-            note = f"Effective {r.effective_date}" if r.effective_date else ""
+            note = f"Effective {r.effective_from}" if r.effective_from else "Effective date not configured"
             seen[r.source_doc] = Citation(doc=r.source_doc, section=r.section, page=None, score=None, snippet=note, url=r.url)
     return list(seen.values())
 
 
 # ----------------------------------------------------------------- calculators
-def pf_calculator(basic: float, rates: dict[str, Any] | None = None) -> ChatResponse:
-    """Employee and employer PF on a monthly basic wage, with the employer share split into EPS and EPF."""
+def pf_calculator(basic: float, rates: dict[str, Any] | None = None, on: date | None = None) -> ChatResponse:
+    """Statutory PF on a monthly basic wage, on wages up to the PF wage ceiling valid on `on`:
+    employee share, employer share split into EPS (up to the EPS wage cap) and EPF, plus EDLI."""
     r = rates or load_rates()
-    emp, er, eps, cap = (rate(r, f"pf.{k}") for k in ("employee_rate", "employer_rate", "eps_rate", "eps_wage_ceiling"))
-    employee = basic * emp.value
+    ceiling = rate(r, "pf.wage_ceiling", on)
+    emp, er, eps, cap, edli = (rate(r, f"pf.{k}", on)
+                               for k in ("employee_rate", "employer_rate", "eps_rate", "eps_wage_cap", "edli_rate"))
+    pf_wage = min(basic, ceiling.value)
+    employee, employer = pf_wage * emp.value, pf_wage * er.value
     eps_base = min(basic, cap.value)
     eps_amt = eps_base * eps.value
-    employer = basic * er.value
+    edli_amt = pf_wage * edli.value
     rows = [
-        ["Employee PF", f"{pct(emp.value)} of basic", inr(employee)],
-        ["Employer → EPS", f"{pct(eps.value)} of {inr(eps_base)} (wage cap {inr(cap.value)})", inr(eps_amt)],
-        ["Employer → EPF", f"{pct(er.value)} of basic minus EPS share", inr(employer - eps_amt)],
-        ["Total to PF", "", inr(employee + employer)],
+        ["PF wage", f"basic {inr(basic)}, up to the wage ceiling of {inr(ceiling.value)} ({ceiling.label()})", inr(pf_wage)],
+        ["Employee PF", f"{pct(emp.value)} of PF wage", inr(employee)],
+        ["Employer → EPS", f"{pct(eps.value)} of {inr(eps_base)} (EPS wage cap {inr(cap.value)})", inr(eps_amt)],
+        ["Employer → EPF", f"{pct(er.value)} of PF wage minus EPS share", inr(employer - eps_amt)],
+        ["Employer → EDLI", f"{pct(edli.value)} of PF wage", inr(edli_amt)],
+        ["Total", "", inr(employee + employer + edli_amt)],
     ]
     return ChatResponse(
         type="tool", tool=f"pf_calculator(basic={basic:g})",
-        answer=f"PF split for a monthly basic wage of {inr(basic)}:",
+        answer=f"PF for a monthly basic wage of {inr(basic)}, using the PF wage ceiling of {inr(ceiling.value)} "
+               f"from {ceiling.label()}:",
         table=Table(columns=["Component", "Basis", "Amount"], rows=rows, totalRow=True),
-        citations=_cite(emp, er, eps, cap), note=NOTE,
+        citations=_cite(ceiling, emp, er, eps, cap, edli), note=NOTE,
     )
 
 
-def esic_calculator(gross: float, rates: dict[str, Any] | None = None) -> ChatResponse:
+def esic_calculator(gross: float, rates: dict[str, Any] | None = None, on: date | None = None) -> ChatResponse:
     """ESIC contributions on monthly gross wages, or 'not covered' above the wage ceiling."""
     r = rates or load_rates()
-    ceiling = rate(r, "esic.wage_ceiling")
+    ceiling = rate(r, "esic.wage_ceiling", on)
     if gross > ceiling.value:
         return ChatResponse(
             type="tool", tool=f"esic_calculator(gross={gross:g})",
@@ -123,7 +203,7 @@ def esic_calculator(gross: float, rates: dict[str, Any] | None = None) -> ChatRe
             citations=_cite(ceiling),
             note=NOTE + " An employee already covered at the start of a contribution period may stay covered until it ends; check the cited notification.",
         )
-    emp, er = rate(r, "esic.employee_rate"), rate(r, "esic.employer_rate")
+    emp, er = rate(r, "esic.employee_rate", on), rate(r, "esic.employer_rate", on)
     rows = [
         ["Employee ESIC", f"{pct(emp.value)} of gross", inr(gross * emp.value)],
         ["Employer ESIC", f"{pct(er.value)} of gross", inr(gross * er.value)],
@@ -137,13 +217,14 @@ def esic_calculator(gross: float, rates: dict[str, Any] | None = None) -> ChatRe
     )
 
 
-def professional_tax(state: str, monthly_salary: float, rates: dict[str, Any] | None = None) -> ChatResponse:
-    """Monthly Professional Tax from the state's slab table."""
+def professional_tax(state: str, monthly_salary: float, rates: dict[str, Any] | None = None,
+                     on: date | None = None) -> ChatResponse:
+    """Monthly Professional Tax from the state's slab table valid on `on`."""
     r = rates or load_rates()
-    block = (r.get("professional_tax") or {}).get(state)
+    block = pick((r.get("professional_tax") or {}).get(state), on)
     if not block or not block.get("slabs"):
-        raise RateMissing(f"professional_tax.{state}")
-    src = Rate(0, block.get("source_doc", ""), block.get("section", ""), str(block.get("effective_date") or ""), block.get("url", ""))
+        raise RateMissing(f"professional_tax.{state}", (block or {}).get("source_doc", ""))
+    src = _rate_of(block, 0)
     for slab in block["slabs"]:
         lo, hi, tax = slab.get("from"), slab.get("to"), slab.get("monthly_tax")
         if lo is None or tax is None:
@@ -161,15 +242,15 @@ def professional_tax(state: str, monthly_salary: float, rates: dict[str, Any] | 
 
 
 def gratuity_estimate(last_basic_da: float, years: float, employment_type: str = "permanent",
-                      rates: dict[str, Any] | None = None) -> ChatResponse:
+                      rates: dict[str, Any] | None = None, on: date | None = None) -> ChatResponse:
     """Gratuity = last (basic + DA) × days_per_year / wage_days_divisor × counted years, capped at max_amount."""
     r = rates or load_rates()
-    days, divisor, cap = (rate(r, f"gratuity.{k}") for k in ("days_per_year", "wage_days_divisor", "max_amount"))
+    days, divisor, cap = (rate(r, f"gratuity.{k}", on) for k in ("days_per_year", "wage_days_divisor", "max_amount"))
     fixed = employment_type.lower().startswith("fixed")
-    min_years = rate(r, "gratuity.min_years_fixed_term" if fixed else "gratuity.min_years_permanent")
+    min_years = rate(r, "gratuity.min_years_fixed_term" if fixed else "gratuity.min_years_permanent", on)
     completed = math.floor(years)
     try:
-        round_after = rate(r, "gratuity.round_up_after_months")
+        round_after = rate(r, "gratuity.round_up_after_months", on)
         if (years - completed) * 12 > round_after.value:
             completed += 1
     except RateMissing:
@@ -202,6 +283,30 @@ def gratuity_estimate(last_basic_da: float, years: float, employment_type: str =
 # ----------------------------------------------------------------- parsing the question
 MONEY = re.compile(r"(?:₹|\brs\.?|\binr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(k\b|lakhs?\b|lacs?\b|l\b)?", re.IGNORECASE)
 YEARS = re.compile(r"(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b", re.IGNORECASE)
+MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
+_MON = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+DATE_PATTERNS = [
+    (re.compile(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b"), lambda m: (int(m[1]), int(m[2]), int(m[3]))),
+    (re.compile(r"\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})\b"), lambda m: (int(m[3]), int(m[2]), int(m[1]))),
+    (re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+" + _MON + r",?\s+(\d{4})\b", re.IGNORECASE),
+     lambda m: (int(m[3]), MONTHS[m[2].lower()], int(m[1]))),
+    (re.compile(r"\b" + _MON + r"\s+(\d{1,2}),?\s+(\d{4})\b", re.IGNORECASE),
+     lambda m: (int(m[3]), MONTHS[m[1].lower()], int(m[2]))),
+    (re.compile(r"\b" + _MON + r",?\s+(\d{4})\b", re.IGNORECASE), lambda m: (int(m[2]), MONTHS[m[1].lower()], 1)),
+]
+
+
+def question_date(text: str) -> tuple[date | None, str]:
+    """A date written in the question ('on 1 Oct 2026', 'in March 2026', '2026-10-01', '01/10/2026'),
+    and the text with that date removed so its year isn't read as an amount."""
+    for pattern, parts in DATE_PATTERNS:
+        m = pattern.search(text)
+        if m:
+            try:
+                return date(*parts(m)), text[: m.start()] + " " + text[m.end() :]
+            except ValueError:
+                continue
+    return None, text
 
 
 def parse_amounts(text: str) -> list[float]:
@@ -219,10 +324,13 @@ def parse_amounts(text: str) -> list[float]:
     return out
 
 
-def run(question: str, scope: Scope, rates: dict[str, Any] | None = None) -> ChatResponse:
-    """Pick the calculator from the question, parse its inputs and run it."""
+def run(question: str, scope: Scope, rates: dict[str, Any] | None = None, today: date | None = None) -> ChatResponse:
+    """Pick the calculator from the question, parse its inputs and run it with the rates valid on
+    the date in the question, or today."""
     q = question.lower()
-    amounts = parse_amounts(question)
+    on, rest = question_date(question)
+    on = on or today or date.today()
+    amounts = parse_amounts(rest)
     if not amounts:
         return ChatResponse(type="tool", answer="Please include the monthly amount, e.g. \"Calculate PF for basic ₹18,000\".")
     amount = amounts[0]
@@ -232,15 +340,16 @@ def run(question: str, scope: Scope, rates: dict[str, Any] | None = None) -> Cha
             if not ym:
                 return ChatResponse(type="tool", answer="How many years of service? e.g. \"gratuity for basic + DA ₹40,000 and 7 years\".")
             etype = "fixed-term" if re.search(r"fixed[- ]?term", q) else "permanent"
-            return gratuity_estimate(amount, float(ym.group(1)), etype, rates)
+            return gratuity_estimate(amount, float(ym.group(1)), etype, rates, on)
         if re.search(r"\b(esic|esi)\b", q):
-            return esic_calculator(amount, rates)
+            return esic_calculator(amount, rates, on)
         if re.search(r"professional tax|\bpt\b", q):
-            return professional_tax(scope.primary, amount, rates)
-        return pf_calculator(amount, rates)
+            return professional_tax(scope.primary, amount, rates, on)
+        return pf_calculator(amount, rates, on)
     except RateMissing as e:
         src = f" Fill it from {e.source_doc.removeprefix('TODO: ')}." if e.source_doc else ""
         return ChatResponse(
-            type="tool", answer=f"Rate not configured: `{e.key}` is empty in data/rates.yaml, so I won't calculate.{src}",
-            note="Add the value with its source_doc and effective_date, then ask again.",
+            type="tool", answer=f"Rate not configured: {e.key}. It is empty in data/rates.yaml for {on.isoformat()}, "
+                                f"so I won't calculate.{src}",
+            note="Add the value with its source_doc and effective_from, then ask again.",
         )

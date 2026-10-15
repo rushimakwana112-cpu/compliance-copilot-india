@@ -6,13 +6,14 @@ import json
 import logging
 import re
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from app import catalog, logs, pipeline
+from app import catalog, logs, pipeline, tools
 from app.config import DATA_DIR, FRONTEND_DIR
 from app.jurisdiction import is_known_state, load_states
 from app.limits import limit_message
@@ -115,6 +116,12 @@ def create_app(services: Services | None = None) -> FastAPI:
     @app.get("/api/states", response_model=list[StateOut])
     def states() -> list[StateOut]:
         return [StateOut(id=s.id, name=s.name, aliases=list(s.aliases)) for s in load_states()]
+
+    @app.get("/api/rates")
+    def rates(on: date | None = None) -> dict:
+        """Every statutory figure from data/rates.yaml as it applies on `on` (default today), with its source.
+        Figures not configured yet are listed with value null."""
+        return tools.resolved(tools.load_rates(), on)
 
     @app.get("/api/documents", response_model=list[DocumentOut])
     def documents() -> list[DocumentOut]:

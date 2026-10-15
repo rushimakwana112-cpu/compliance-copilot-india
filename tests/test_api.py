@@ -139,3 +139,14 @@ def test_foreign_place_is_refused_without_retrieval_or_llm(services, store, llm,
         r = c.post(endpoint, json={"message": "Gratuity rule in Dubai?"})
     assert "I only cover Indian law" in r.text and "Dubai" in r.text and '"not_found"' in r.text
     assert store.searches == [] and llm.calls == []
+
+
+def test_rates_endpoint_lists_figures_with_sources(services):
+    with TestClient(create_app(services)) as c:
+        body = c.get("/api/rates", params={"on": "2026-10-15"}).json()
+        bad = c.get("/api/rates", params={"on": "not-a-date"})
+    assert body["date"] == "2026-10-15"
+    ceiling = body["rates"]["pf.wage_ceiling"]
+    assert ceiling["value"] == 25000 and ceiling["source_doc"] == "Gazette notification 17 Sept 2026"
+    assert "pf.employee_rate" in body["rates"] and body["rates"]["pf.employee_rate"]["value"] is None
+    assert "gujarat" in body["professional_tax"] and bad.status_code == 422
