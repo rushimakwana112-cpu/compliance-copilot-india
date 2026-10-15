@@ -16,7 +16,7 @@ VERIFY = re.compile(
     r"(?:check|verify|recheck|validate) (?:my|this|the) (?:calculation|calc|math|figure|answer)|am i right|sahi hai)\b\??",
     re.IGNORECASE,
 )
-CLAIM = re.compile(r"(?:=|comes? to|is coming|i got|i get|getting|works? out to|equals|total(?: is)?|should be)\s*"
+CLAIM = re.compile(r"(?:=|comes? to|is coming|i got|i get|getting|works? out to|equals|total(?: is)?|should be|\bis)\s*"
                    r"(?:₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d+)?)", re.IGNORECASE)
 MONEY = re.compile(r"[-]?₹[\d,]+")
 
@@ -29,6 +29,8 @@ def split(text: str) -> tuple[str, float] | None:
     if not claims:
         return None
     last = claims[-1]
+    if re.search(r"\d", text[last.end():]):  # "basic is 18000, pf 2160": the figure to check comes last
+        return None
     claim = float(last.group(1).replace(",", ""))
     rest = VERIFY.sub(" ", text[: last.start()] + " " + text[last.end():])
     return re.sub(r"\s{2,}", " ", rest).strip(" .,?;:"), claim

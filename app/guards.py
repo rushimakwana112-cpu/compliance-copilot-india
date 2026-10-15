@@ -67,7 +67,10 @@ OTHER_EMPLOYEE = re.compile(
     r"(?-i:[A-Z][a-z]+)'s\s+(?:salary|ctc|pay|payslip|pf|bonus|increment|bank)"
     r"|\b(?:list|show|give|display|export|download)\b[^?.]{0,20}\b(?:all\s+)?(?:the\s+)?(?:employees|staff|workers|employee list|employee data|employee records)\b"
     r"|\ball employees\b|\bemployee (?:list|data|database|records|details)\b|\bsample (?:data|employees?|payroll)\b"
-    r"|\bwho (?:earns|gets|has) the (?:most|highest|lowest|least)\b|\b(?:my|a) colleague'?s?\b[^?.]{0,20}\b(?:salary|pay|ctc)\b",
+    r"|\bwho (?:earns|gets|has) the (?:most|highest|lowest|least)\b|\b(?:my|a) colleague'?s?\b[^?.]{0,20}\b(?:salary|pay|ctc)\b"
+    # "show salary of ramesh": a name typed in lower case
+    r"|\b(?:show|tell|give|display|share|send)\b[^?.]{0,15}\b(?:salary|ctc|pay|payslip|pf)\s+of\s+"
+    r"(?!a\b|an\b|the\b|my\b|me\b|our\b|employees?\b|workers?\b|staff\b|\d)[a-z]+\b",
     re.IGNORECASE,
 )
 

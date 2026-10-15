@@ -648,8 +648,15 @@ def cited_numbers(answer: str) -> set[int]:
     return {int(x) for m in CITE.finditer(answer) for x in m.group(1).split(",")}
 
 
+NOT_FOUND_LINE = re.compile(r"^[\s*`\"'.]*NOT_FOUND[\s*`\"'.]*$", re.MULTILINE)
+
+
 def is_not_found(text: str) -> bool:
-    return text.strip().strip(".*`\"'").upper().startswith(NOT_FOUND)
+    """NOT_FOUND at the start, or on a line of its own in an answer that cites nothing
+    ("The passages do not answer the question.\\n\\nNOT_FOUND")."""
+    if text.strip().strip(".*`\"'").upper().startswith(NOT_FOUND):
+        return True
+    return bool(NOT_FOUND_LINE.search(text)) and not CITE.search(text)
 
 
 def _scope_out(scope: Scope) -> ScopeOut:
@@ -705,9 +712,13 @@ def finish(raw: str, passages: list[Passage], scope: Scope, question: str = "") 
     """
     if is_not_found(raw):
         return not_found(scope)
+    raw = NOT_FOUND_LINE.sub("", raw).strip()  # a cited answer that also says NOT_FOUND: keep the answer
     text = answer_style(question, clean_citations(raw, len(passages)))
     note = repealed_note(text, passages)
     text, order = renumber(text, len(passages))
+    if not cited_numbers(text):  # no [n] at all: don't present every passage as a source the answer used
+        order = []
+        note = note or "This answer doesn't cite a passage; check it against the passages searched."
     cited = [passages[i - 1].citation() for i in order]
     others = [p.citation() for i, p in enumerate(passages, 1) if i not in order]
     return ChatResponse(type="rag", answer=text, scope=_scope_out(scope), citations=cited,
