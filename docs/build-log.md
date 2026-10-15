@@ -213,3 +213,9 @@ A new test (`tests/test_deploy.py`) fails if a legal-looking number (PF/EPS/ESIC
 - *Refuse cheaply.* Regex guards run before retrieval and the model, so a "show my payslip" question costs nothing and can't be talked into inventing data.
 - *Never let translation touch numbers.* The model translates, Python compares every number before and after, and falls back to English if one changed.
 - *Ask instead of assume.* 26 vs 30 days, basic as % of CTC and whether employer PF is inside CTC are company policy, so the bot asks; the law only says the deduction must be in proportion to the absence (Code on Wages s.20).
+
+## Windows fix: reading git output as UTF-8 (15 Oct 2026)
+
+**What changed:** `test_no_secret_in_git_history` crashed on Windows with `TypeError: expected string or bytes-like object, got 'NoneType'`. The tests now read git output with `encoding="utf-8", errors="replace"`.
+
+**What to learn:** `subprocess.run(..., text=True)` decodes with the system's default encoding, which is cp1252 on Windows. The git history now contains ₹ and Hindi/Gujarati text (UTF-8), which cp1252 can't decode. On Windows that error happens in a background reader thread, so instead of a clear `UnicodeDecodeError` you get `stdout = None` and a confusing `TypeError` later. Always name the encoding when reading another program's output.
